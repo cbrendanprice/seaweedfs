@@ -1,45 +1,362 @@
 # Available parameters and their default values for the SeaweedFS chart.
+fullnameOverride: ""
+nameOverride: ""
 
 global:
   createClusterRole: true
   registry: ""
   repository: ""
   imageName: chrislusf/seaweedfs
-  imagePullPolicy: IfNotPresent
+  imagePullPolicy: "IfNotPresent"
   imagePullSecrets: ""
-  restartPolicy: Always
+  localRegistry: ""
   loggingLevel: 1
-  enableSecurity: false
   masterServer: null
+  restartPolicy: Always
+  serviceAccountName: "seaweedfs"
+  ## @param global.storageClass PVC Storage Class for all component
+  ##  persistence
+  ##
+  ## If defined, storageClassName: <storageClass>
+  ##
+  ## If set to "-", storageClassName: "", which disables dynamic provisioning
+  ##
+  ## If undefined (the default) or set to null, no storageClassName spec is
+  ## set, choosing the default provisioner.
+  ##
+  storageClass: ""
+
+  extraEnvironmentVars:
+    WEED_CLUSTER_DEFAULT: "sw"
+    WEED_CLUSTER_SW_MASTER: "seaweedfs-master.seaweedfs.svc:9333"
+    WEED_CLUSTER_SW_FILER: "seaweedfs-filer-client.seaweedfs.svc:8888"
+    # WEED_JWT_SIGNING_KEY:
+    #   secretKeyRef:
+    #     name: seaweedfs-signing-key
+    #     key: signingKey
+
+  monitoring:
+    enabled: false
+    gatewayHost: null
+    gatewayPort: null
+
+  ## @param master.podAnnotations Annotations for seaweedfs pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
+
+  ## @param global.podLables Lables for all seaweedfs pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+  ##
+  podLabels: {}
+
+  ## @param global.s3 Defines configuration for the s3 gateway.
+  ##
+  ## Note: this configuration is shared between the filer and the
+  ##       s3 server components, depending on which is enabled.
+  ##
+  s3Gateway:
+    ## @param global.s3Gateway.allowDeleteBucketNotEmpty
+    ##
+    allowDeleteBucketNotEmpty: true
+    ## @param global.s3Gateway.allowEmptyFolder
+    ##
+    allowEmptyFolder: true
+    ## @param global.s3Gateway.domainName
+    ##  The domain name that the s3 gateway will be configured with.
+    ##
+    domainName: ""
+
+    ## @param global.s3Gateway.auditLog
+    auditLog:
+      ## @param global.s3Gateway.auditLog.jsonContent [object]
+      ##  Defines the contents that will be encoded as json and injected
+      ##   into th s3 gateway's audit log configuration file.
+      ##
+      jsonContents: {}
+
+    ## @param global.s3Gateway.auth Defines auth related configuration
+    ##  for the s3 gateway.
+    ##
+    auth:
+      ## @param global.s3Gateway.auth.enabled
+      ##  specifies whether auth should be enalbed for the s3 gateway.
+      ##
+      ##  if enabled, a configuration file will be created for the s3
+      ##   gateway containing enabled identities. separately, a secret
+      ##   will be created containing the supplied credentials.
+      ##
+      ##  if not enabled, then _any_ credentials supplied to the s3
+      ##   gateway will automatically be granted full permissions.
+      ##
+      enabled: true
+      ## @param global.s3Gateway.auth.existingBucketUserConfigSecret
+      ##  specifies the name of a secret containing authorization
+      ##   configuration for users that any/all buckets created as
+      ##   part of this release will be configured with.
+      ##
+      ##  ref: `global.s3Gateway.buckets` below
+      ##
+      existingBucketUserConfigSecret: ""
+      ## @param global.s3Gateway.auth.extraIdentitiesSecret
+      ##  specifies the name of a secret containing additional s3 gateway
+      ##   identities.
+      ##
+      ## Note: the secret is expected to contain a stringData key of
+      ##       `identities.json` that is mapped to a json formatted
+      ##       array of valid s3 gateway identity objects.
+      ##
+      ## e.g.
+      ##
+      ## ---
+      ## apiVersion: v1
+      ## kind: Secret
+      ## ...
+      ## stringData:
+      ##   identities.json: '[{"name":"my-identity","actions":["Read"],"credentials":[{"accessKey":"my-access-key","secretKey":"my-secret-key"}]}]'
+      ##
+      extraIdentitiesSecret: ""
+
+      ## @param global.s3Gateway.auth.identities
+      ##  provides auth configuration options for this charts
+      ##   "built-in" identities.
+      ##
+      identities:
+        ## @param global.s3Gateway.auth.identities.administrator Auth configuration
+        ##  for the `administrator` s3 gateway identity.
+        ##
+        administrator:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled Enables
+          ##  the `administrator` s3 gateway identity.
+          ##
+          enabled: true
+          ## @param global.s3Gateway.auth.identities.administrator.credentials
+          ##  A list of s3 gateway access credentials that will grant
+          ##   the `administrator` identity privileges.
+          ##
+          ## Note: these do *NOT* need to be access keys granted by AWS;
+          ##       they are only used by the seaweedfs s3 gateway alone.
+          ##
+          ## e.g.
+          ## credentials:
+          ##  - accessKey: "1234567890ABCDEFG"
+          ##    secretKey: "1234567890ABCDEFG"
+          ##
+          credentials: []
+          ## @param global.s3Gateway.auth.identities.administrator.credentialsExistingSecret
+          ##  the name of an existing secret containing a list of key pairs
+          ##   that will be registered under the built-in `administrator` identity.
+          ##
+          ## e.g.
+          ## ---
+          ## apiVersion: v1
+          ## kind: Secret
+          ## ...
+          ## stringData:
+          ##   credentials.json: '[{"accessKey":"access-key","secretKey":"secret-key"}]'
+          ##
+          credentialsExistingSecret: ""
+        ## @param global.s3Gateway.auth.identities.anonymous Auth configuration
+        ##  for the `anonymous` s3 gateway identity.
+        ##
+        ## Note: the `anonymous` identity can:
+        ##       - read bucket files**
+        ##
+        ## ** this effectively means that they must have a direct link
+        ##    to the bucket file in order to access.
+        ##
+        anonymous:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled
+          ##  Enables the `anonymous` s3 gateway identity.
+          ##
+          enabled: false
+        ## @param global.s3Gateway.auth.identities.guest Auth configuration for
+        ##   the `guest` s3 gateway identity.
+        ##
+        ## Note: the `guest` identity can:
+        ##       - list all bucket folders and files
+        ##       - read all bucket files
+        ##
+        guest:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled
+          ##  Enables the `guest` s3 gateway identity.
+          ##
+          enabled: true
+          ## @param global.s3Gateway.auth.identities.administrator.credentials
+          ##  A list of s3 gateway access credentials that will grant
+          ##   the `guest` identity privileges.
+          ##
+          ## Note: these do *NOT* need to be access keys granted by AWS;
+          ##       they are only used by the seaweedfs s3 gateway alone.
+          ##
+          ## e.g.
+          ## credentials:
+          ##  - accessKey: "1234567890ABCDEFG"
+          ##    secretKey: "1234567890ABCDEFG"
+          ##
+          credentials: []
+          ## @param global.s3Gateway.auth.identities.guest.credentialsExistingSecret
+          ##  the name of an existing secret containing a list of key pairs
+          ##   that will be registered under the built-in `guest` identity.
+          ##
+          ## e.g.
+          ## ---
+          ## apiVersion: v1
+          ## kind: Secret
+          ## ...
+          ## stringData:
+          ##   credentials.json: '[{"accessKey":"access-key","secretKey":"secret-key"}]'
+          ##
+          credentialsExistingSecret: ""
+        ## @param global.s3Gateway.auth.identities.member Auth configuration for
+        ##  the `member` s3 gateway identity.
+        ##
+        ## Note: the `member` identity can:
+        ##       - list all bucket folders and files
+        ##       - read all bucket files
+        ##       - create new bucket files
+        ##       - tag bucket files
+        ##
+        member:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled
+          ##  Enables the `member` s3 gateway identity.
+          ##
+          enabled: true
+          ## @param global.s3Gateway.auth.identities.administrator.credentials
+          ##  A list of s3 gateway access credentials that will grant
+          ##   the `member` identity privileges.
+          ##
+          ## Note: these do *NOT* need to be access keys granted by AWS;
+          ##       they are only used by the seaweedfs s3 gateway alone.
+          ##
+          ## e.g.
+          ## credentials:
+          ##  - accessKey: "1234567890ABCDEFG"
+          ##    secretKey: "1234567890ABCDEFG"
+          ##
+          credentials: []
+          ## @param global.s3Gateway.auth.identities.member.credentialsExistingSecret
+          ##  the name of an existing secret containing a list of key pairs
+          ##   that will be registered under the built-in `member` identity.
+          ##
+          ## e.g.
+          ## ---
+          ## apiVersion: v1
+          ## kind: Secret
+          ## ...
+          ## stringData:
+          ##   credentials.json: '[{"accessKey":"access-key","secretKey":"secret-key"}]'
+          ##
+          credentialsExistingSecret: ""
+
+    ## @param global.s3Gateway.buckets A predefined list of buckets
+    ##  that will be automatically be created as part of the release.
+    ##
+    ##  e.g.
+    ##  buckets:
+    ##  - anonymousRead: false
+    ##    name: "mybucket"
+    ##
+    buckets: []
+
+    ## Enable ingress for the s3 gateway seaweedfs component
+    ##
+    ingress:
+      ## @param s3Gateway.ingress.enabled
+      ##
+      enabled: false
+
+      ## @param s3Gateway.ingress.className
+      ##
+      className: "nginx"
+      ## @param s3Gateway.ingress.hostname
+      ##
+      hostname: "seaweedfs-master.seaweedfs.svc.cluster.local"
+
+      ## @param s3Gateway.ingress.annotations
+      ##
+      annotations: []
+
+      ## @param s3Gateway.ingress.extraHosts An array with additional hostname(s) to be covered
+      ##        by ingress
+      ##
+      ## Note: this value is evaluated as a template
+      ##
+      extraHosts: []
+
+      ## @param s3Gateway.ingress.tls
+      ##
+      tls: []
+
+    ## @param global.s3Gateway.ports
+    ##
+    ports:
+      ##
+      ## @param global.s3Gateway.http [int] [required]
+      ##  Defines a port that the s3 gateway will receieve https
+      ##   traffic on.
+      ##
+      http: 8333
+      ##
+      ## @param global.s3Gateway.https [int]
+      ##  Defines a port that the s3 gateway will receieve https
+      ##   traffic on. If not provided https communications will
+      ##   be disabled.
+      ##
+      ##  Note: Ignored if tls has not been enabled.
+      ##        See @param global.tls
+      ##
+      https: ""
+
+  # TODO: necessary?
   securityConfig:
     jwtSigning:
       volumeWrite: true
       volumeRead: false
       filerWrite: false
       filerRead: false
-  # we will use this serviceAccountName for all ClusterRoles/ClusterRoleBindings
-  serviceAccountName: "seaweedfs"
-  certificates:
-    alphacrds: false
-  monitoring:
+
+  ## @param global.topologicalReplication
+  ##  configures topological placement of replicas created for both the
+  ##   master and filer services.
+  ##
+  ## Note: this relies upon the topology configuration of volume servers.
+  ##
+  ## Note: replication in different data centeers and/or in different racks
+  ##       is only feasible when creating multiple, _separate_ releases of
+  ##       this chart that have volume servers configured with different
+  ##       topologies, and that have all been configured to serve as one
+  ##       cohesive seaweedfs cluster.
+  ##
+  topologicalReplication:
     enabled: false
-    gatewayHost: null
-    gatewayPort: null
-  # if enabled will use global.replicationPlacment and override master & filer defaultReplicaPlacement config
-  enableReplication: false
-  #  replication type is XYZ:
-  # X number of replica in other data centers
-  # Y number of replica in other racks in the same data center
-  # Z number of replica in other servers in the same rack
-  replicationPlacment: "001"
-  extraEnvironmentVars:
-    WEED_CLUSTER_DEFAULT: "sw"
-    WEED_CLUSTER_SW_MASTER: "seaweedfs-master.seaweedfs:9333"
-    WEED_CLUSTER_SW_FILER: "seaweedfs-filer-client.seaweedfs:8888"
-    # WEED_JWT_SIGNING_KEY:
-    #   secretKeyRef:
-    #     name: seaweedfs-signing-key
-    #     key: signingKey
+    ## @param global.topologicalReplication.countInDifferentDataCenters
+    ##
+    ## Note: the maximum value is 9
+    ##
+    ## Note: please read the second note above before setting.
+    ##
+    countInDifferentDataCenters: 0
+    ## @param global.topologicalReplication.countInSameDataCenterAndSameRack
+    ##
+    ## Note: the maximum value is 9
+    ##
+    countInSameDataCenterAndSameRack: 0
+    ## @param global.topologicalReplication.countInSameDataCenterButDifferentRacks
+    ##
+    ## Note: the maximum value is 9
+    ##
+    ## Note: please read the second note above before setting.
+    ##
+    countInSameDataCenterButDifferentRacks: 0
+
+  ## @param global.tls
+  ##
+  tls:
+    ##
+    ## @param global.tls.enabled
+    ##
+    enabled: false
 
 image:
   registry: ""
@@ -51,57 +368,22 @@ master:
   imageName: null
   imageTag: null
   imageOverride: null
+  podManagementPolicy: Parallel
   restartPolicy: null
   replicas: 1
-  port: 9333
-  grpcPort: 19333
-  metricsPort: 9327
   ipBind: "0.0.0.0"
-  volumePreallocate: false
-  volumeSizeLimitMB: 1000
   loggingOverrideLevel: null
-  # number of seconds between heartbeats, default 5
-  pulseSeconds: null
-  # threshold to vacuum and reclaim spaces, default 0.3 (30%)
-  garbageThreshold: null
-  # Prometheus push interval in seconds, default 15
-  metricsIntervalSec: 15
-  #  replication type is XYZ:
-  # X number of replica in other data centers
-  # Y number of replica in other racks in the same data center
-  # Z number of replica in other servers in the same rack
-  defaultReplication: "000"
 
-  # Disable http request, only gRpc operations are allowed
-  disableHttp: false
+  extraEnvironmentVars:
+    WEED_MASTER_VOLUME_GROWTH_COPY_1: '7'
+    WEED_MASTER_VOLUME_GROWTH_COPY_2: '6'
+    WEED_MASTER_VOLUME_GROWTH_COPY_3: '3'
+    WEED_MASTER_VOLUME_GROWTH_COPY_OTHER: '1'
 
-  config: |-
-    # Enter any extra configuration for master.toml here.
-    # It may be be a multi-line string.
+  initContainers: ""
 
-  # You may use ANY storage-class, example with local-path-provisioner
-  # Annotations are optional.
-  #  data:
-  #    type: "persistentVolumeClaim"
-  #    size: "24Ti"
-  #    storageClass: "local-path-provisioner"
-  #    annotations:
-  #      "key": "value"
-  #
-  # You may also spacify an existing claim:
-  #  data:
-  #    type: "existingClaim"
-  #    claimName: "my-pvc"
-  data:
-    type: "hostPath"
-    storageClass: ""
-    hostPathPrefix: /ssd
-
-  logs:
-    type: "hostPath"
-    size: ""
-    storageClass: ""
-    hostPathPrefix: /storage
+  extraVolumes: ""
+  extraVolumeMounts: ""
 
   ## @param master.sidecars Add additional sidecar containers to the master pod(s)
   ## e.g:
@@ -113,14 +395,7 @@ master:
   ##       - name: portname
   ##         containerPort: 1234
   ##
-  sidecars: []
-  initContainers: ""
-
-  extraVolumes: ""
-  extraVolumeMounts: ""
-
-  ## Set podManagementPolicy
-  podManagementPolicy: Parallel
+  sidecars: [ ]
 
   # Resource requests, limits, etc. for the master cluster placement. This
   # should map directly to the value of the resources field for a PodSpec,
@@ -166,35 +441,6 @@ master:
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccountName: ""
 
-  ingress:
-    enabled: false
-    className: "nginx"
-    # host: false for "*" hostname
-    host: "master.seaweedfs.local"
-    annotations: |
-      nginx.ingress.kubernetes.io/auth-type: "basic"
-      nginx.ingress.kubernetes.io/auth-secret: "default/ingress-basic-auth-secret"
-      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required - SW-Master'
-      nginx.ingress.kubernetes.io/service-upstream: "true"
-      nginx.ingress.kubernetes.io/rewrite-target: /$1
-      nginx.ingress.kubernetes.io/use-regex: "true"
-      nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
-      nginx.ingress.kubernetes.io/ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/configuration-snippet: |
-        sub_filter '<head>' '<head> <base href="/sw-master/">'; #add base url
-        sub_filter '="/' '="./';                                #make absolute paths to relative
-        sub_filter '=/' '=./';
-        sub_filter '/seaweedfsstatic' './seaweedfsstatic';
-        sub_filter_once off;
-    tls: []
-
-  extraEnvironmentVars:
-    WEED_MASTER_VOLUME_GROWTH_COPY_1: '7'
-    WEED_MASTER_VOLUME_GROWTH_COPY_2: '6'
-    WEED_MASTER_VOLUME_GROWTH_COPY_3: '3'
-    WEED_MASTER_VOLUME_GROWTH_COPY_OTHER: '1'
-
   # used to configure livenessProbe on master-server containers
   #
   livenessProbe:
@@ -221,6 +467,222 @@ master:
     failureThreshold: 100
     timeoutSeconds: 10
 
+  ## @param master.configuration [object] Configuration options
+  ##  for the master server component.
+  ##
+  configuration:
+    ## @param master.configuration.heartbeatIntervalSeconds [required]
+    ##  specifies the standard heartbeat interval amount in seconds.
+    ##
+    heartbeatIntervalSeconds: 5
+    ## @param master.configuration.preallocateDiskSpaceForVolumes
+    ##
+    preallocateDiskSpaceForVolumes: false
+    # TODO: uncomment if/when this is made available in the cli and remove heartbeat above
+    ## @param master.configuration.pulseSeconds [required]
+    ##  specifies the standard hearbeat interval amount in seconds.
+    ##
+    #pulseSeconds: 5
+
+    ## @param master.configuration.file configuration specific to the
+    ##  `master.toml` configuration file.
+    file:
+      ## @param master.configuration.file.tomlContents Defines the contents
+      ##  that will be injected into the `master.toml` configuration file.
+      ##
+      ## e.g.
+      ## tomlContents: |-
+      ##   config_option: "config_value"
+      ##
+      tomlContents: ""
+
+    ## @param master.configuration.limits
+    ##
+    limits:
+      ## @param master.configuration.limits.garbageCollectionThreshold [required]
+      ##  specifides the percentage threshold at which garbage collection
+      ##   will perform a vaccuum to reclaim space.
+      ##
+      garbageCollectionThreshold: 30.0
+      ## @param master.configuration.limits.targetableVolumeMaximumSize [required]
+      ##  specifies the maximum volume size in MB before a volume will no longer
+      ##   have writes directed to it by the master.
+      ##
+      targetableVolumeMaximumSize: 30000
+
+    ## @param master.configuration.metrics
+    ##
+    metrics:
+      ## @param master.configuration.metrics.intervalSeconds
+      ##  specifies the interval in seconds that metrics will be pushed
+      ##   to prometheus.
+      ##
+      intervalSeconds: 15
+
+    ## @param master.configuration.ports
+    ##
+    ports:
+      ## @param master.configuration.ports.grpc [required]
+      ##  Defines a port that the master server will receieve grpc traffic on.
+      ##
+      grpc: 19333
+      ## @param master.configuration.ports.http
+      ##  Defines a port that the master server will receieve https traffic on.
+      ##
+      http: 9333
+      ## @param master.configuration.ports.metrics
+      ##  Defines a port that the master server will expose metrics on.
+      ##
+      metrics: 9237
+
+  ## Enable ingress for the master seaweedfs component
+  ##
+  ingress:
+    ## @param master.ingress.enabled
+    ##
+    enabled: false
+
+    ## @param master.ingress.className
+    ##
+    className: "nginx"
+    ## @param master.ingress.hostname
+    ##
+    hostname: "seaweedfs-master.seaweedfs.svc.cluster.local"
+
+    ## @param master.ingress.annotations
+    ##
+    annotations: |
+      nginx.ingress.kubernetes.io/auth-type: "basic"
+      nginx.ingress.kubernetes.io/auth-secret: "default/ingress-basic-auth-secret"
+      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required - SW-Master'
+      nginx.ingress.kubernetes.io/service-upstream: "true"
+      nginx.ingress.kubernetes.io/rewrite-target: /$1
+      nginx.ingress.kubernetes.io/use-regex: "true"
+      nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        sub_filter '<head>' '<head> <base href="/sw-master/">'; #add base url
+        sub_filter '="/' '="./';                                #make absolute paths to relative
+        sub_filter '=/' '=./';
+        sub_filter '/seaweedfsstatic' './seaweedfsstatic';
+        sub_filter_once off;
+
+    ## @param master.ingress.extraHosts An array with additional hostname(s) to be covered
+    ##        by ingress
+    ##
+    ## Note: this value is evaluated as a template
+    ##
+    extraHosts: []
+
+    ## @param master.ingress.tls
+    ##
+    tls: []
+
+  ## Enable persistence of master data and logs using Persistent Volume Claims
+  ## ref: https://kubernetes.io/docs/user-guide/persistent-volumes/
+  ##
+  persistence:
+    data:
+      ## @param master.persistence.data.enabled Enable master data persistence using PVC
+      ##
+      enabled: true
+      ## @param master.persistence.indices.accessModes Persistent Volume Access Modes
+      ##
+      accessModes:
+        - ReadWriteOnce
+      ## @param controller.persistence.annotations Annotations for the PVC
+      ##
+      annotations: { }
+      ## @param master.persistence.data.existingClaim
+      ##  A manually managed Persistent Volume and Claim.
+      ##
+      ## Note: If defined, PVC must be created manually before Volume will be bound
+      ##
+      ## Note: The value is evaluated as a template
+      ##
+      existingClaim: ""
+      ## @param master.persistence.data.hostPathPrefix
+      ##  the prefix that will be used when creating the PV with the type of hostPath.
+      ##
+      hostPathPrefix: ""
+      ## @param controller.persistence.labels Labels for the PVC
+      ##
+      labels: {}
+      ## @param controller.persistence.mountPath Mount path of the master data volume
+      ##
+      mountPath: /data
+      ## @param controller.persistence.selector Selector to match an existing Persistent Volume for master data PVC.
+      ## If set, the PVC can't have a PV dynamically provisioned for it
+      ##
+      ## e.g.
+      ## selector:
+      ##   matchLabels:
+      ##     app: my-app
+      ##
+      selector: {}
+      ## @param controller.persistence.size PVC Storage Request for master data
+      ##
+      size: 5Gi
+      ## @param master.persistence.data.storageClass PVC Storage Class for master data
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ## set, choosing the default provisioner.
+      ##
+      storageClass: ""
+
+    logs:
+      ## @param master.persistence.logs.enabled Enable master logs persistence using PVC
+      ##
+      enabled: true
+      ## @param master.persistence.indices.accessModes Persistent Volume Access Modes
+      ##
+      accessModes:
+      - ReadWriteOnce
+      ## @param controller.persistence.annotations Annotations for the PVC
+      ##
+      annotations: {}
+      ## @param master.persistence.logs.existingClaim A manually managed Persistent Volume and Claim
+      ## If defined, PVC must be created manually before Volume will be bound
+      ## The value is evaluated as a template
+      ##
+      existingClaim: ""
+      ## @param master.persistence.logs.hostPathPrefix
+      ##  the prefix that will be used when creating the PV with the type of hostPath.
+      ##
+      hostPathPrefix: ""
+      ## @param controller.persistence.labels Labels for the PVC
+      ##
+      labels: {}
+      ## @param controller.persistence.mountPath Mount path of the master logs volume
+      ##
+      mountPath: /logs
+      ## @param controller.persistence.selector Selector to match an existing Persistent Volume for master logs PVC.
+      ## If set, the PVC can't have a PV dynamically provisioned for it
+      ##
+      ## e.g.
+      ## selector:
+      ##   matchLabels:
+      ##     app: my-app
+      ##
+      selector: {}
+      ## @param controller.persistence.size PVC Storage Request for master logs
+      ##
+      size: 1Gi
+      ## @param master.persistence.logs.storageClass PVC Storage Class for master logs
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ## set, choosing the default provisioner.
+      ##
+      storageClass: ""
+
+  ## @param master.podAnnotations Annotations for master pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
+
 volume:
   enabled: true
   repository: null
@@ -228,93 +690,16 @@ volume:
   imageTag: null
   imageOverride: null
   restartPolicy: null
-  port: 8080
-  grpcPort: 18080
-  metricsPort: 9327
   ipBind: "0.0.0.0"
   replicas: 1
   loggingOverrideLevel: null
-  # number of seconds between heartbeats, must be smaller than or equal to the master's setting
-  pulseSeconds: null
-  # Choose [memory|leveldb|leveldbMedium|leveldbLarge] mode for memory~performance balance., default memory
-  index: null
-  # limit file size to avoid out of memory, default 256mb
-  fileSizeLimitMB: null
-  # minimum free disk space(in percents). If free disk space lower this value - all volumes marks as ReadOnly
-  minFreeSpacePercent: 7
 
-  # For each data disk you may use ANY storage-class, example with local-path-provisioner
-  # Annotations are optional.
-  #  dataDirs:
-  #   - name: data:
-  #     type: "persistentVolumeClaim"
-  #     size: "24Ti"
-  #     storageClass: "local-path-provisioner"
-  #     annotations:
-  #      "key": "value"
-  #     maxVolumes: 0  # If set to zero on non-windows OS, the limit will be auto configured. (default "7")
-  #
-  # You may also spacify an existing claim:
-  #    - name: data
-  #      type: "existingClaim"
-  #      claimName: "my-pvc"
-  #     maxVolumes: 0  # If set to zero on non-windows OS, the limit will be auto configured. (default "7")
+  extraEnvironmentVars: {}
 
-  dataDirs:
-  - name: data1
-    type: "hostPath"
-    hostPathPrefix: /ssd
-    maxVolumes: 0
+  initContainers: ""
 
-   # - name: data2
-   #   type: "persistentVolumeClaim"
-   #   storageClass: "yourClassNameOfChoice"
-   #   size: "800Gi"
-   #   maxVolumes: 0
-
-  # idx can be defined by:
-  #
-  # idx:
-  #  type: "hostPath"
-  #  hostPathPrefix: /ssd
-  #
-  # or
-  #
-  # idx:
-  #  type: "persistentVolumeClaim"
-  #  size: "20Gi"
-  #  storageClass: "local-path-provisioner"
-  #
-  # or
-  #
-  # idx:
-  #   type: "existingClaim"
-  #   claimName: "myClaim"
-
-  # same applies to "logs"
-
-  idx: ""
-
-  logs: ""
-
-  # limit background compaction or copying speed in mega bytes per second
-  compactionMBps: "50"
-
-
-  # Volume server's rack name
-  rack: null
-
-  # Volume server's data center name
-  dataCenter: null
-
-  # Redirect moved or non-local volumes. (default proxy)
-  readMode: proxy
-
-  # Comma separated Ip addresses having write permission. No limit if empty.
-  whiteList: null
-
-  # Adjust jpg orientation when uploading.
-  imagesFixOrientation: false
+  extraVolumes: ""
+  extraVolumeMounts: ""
 
   ## @param volume.sidecars Add additional sidecar containers to the volume pod(s)
   ## e.g:
@@ -327,10 +712,6 @@ volume:
   ##         containerPort: 1234
   ##
   sidecars: []
-  initContainers: ""
-
-  extraVolumes: ""
-  extraVolumeMounts: ""
 
   ## Set podManagementPolicy
   podManagementPolicy: Parallel
@@ -375,8 +756,6 @@ volume:
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccountName: ""
 
-  extraEnvironmentVars:
-
   # used to configure livenessProbe on volume-server containers
   #
   livenessProbe:
@@ -403,6 +782,320 @@ volume:
     failureThreshold: 100
     timeoutSeconds: 30
 
+  ## @param volume.configuration Configuration for the volume server component.
+  ##
+  configuration:
+    ## @param volume.configuration.allowRequestsToBypassSlowReads
+    ##  specifies weather the volume server should continue to service
+    ##   requests during slow read operations.
+    ##
+    ## Note: this will lead to an increase in P99 latency for larger files.
+    ##
+    allowRequestsToBypassSlowReads: false
+    ## @param volume.configuration.autoAdjustImageOrientation
+    ##  specifies whether the volume server should automatically adjust
+    ##   image orientation upon upload.
+    ##
+    ## Note: this curretly only works for `jpg` image types.
+    ##
+    autoAdjustImageOrientation: false
+    ## @param volume.configuration.fileAccessBufferSize
+    ##  specifies the size in MB that will be used to buffer reads to
+    ##   files on the volume server's volumes.
+    ##
+    ## Note: increasing this size may help to optimize read performance
+    ##       but will also increase memory utilization.
+    ##
+    ## Note: this value should be configured appropriately when
+    ##       s3.configuration.allowRequestsToBypassSlowReads is true.
+    ##
+    fileAccessBufferSize: 4
+    ## @param volume.configuration.idleTimeoutSeconds
+    ##  specifies the number in seconds that connections to the volume
+    ##   server are allowed to remain idle for.
+    ##
+    idleTimeoutSeconds: 30
+    ## @param volume.configuration.indexingImplementation [required]
+    ##  specifies the implementation for indexing that the volume server
+    ##   will use.
+    ##
+    ## Note: the following indexing implementations are supported, each with
+    ##       a different memory~performance tradeoff:
+    ##       - memory
+    ##       - leveldb
+    ##       - leveldbMedium
+    ##       - leveldbLarge
+    ##
+    indexingImplementation: "memory"
+    ## @param volume.configuration.nonLocalVolumeReadRequestPolicy [required]
+    ##  specifies what the volume server should do with requests made
+    ##   to volumes that are not local to the server.
+    ##
+    ## Note: the following policies are supported:
+    ##       - `local`   : this policy will deny requests made to any volumes
+    ##                     not managed by the volume server
+    ##       - `proxy`   : this policy will result in the volume server proxying
+    ##                     requests to the remote node managing the volume.
+    ##       - `redirect`: this policy will result in the volume server
+    ##                     redirecting the request to the volume's location.
+    ##
+    nonLocalVolumeReadRequestPolicy: "proxy"
+    # TODO: uncomment if/when this is made available in the cli
+    ## @param volume.configuration.pulseSeconds [required]
+    ##  specifies the standard hearbeat interval amount in seconds.
+    ##
+    #pulseSeconds: 5
+    ## @param volume.configuration.writePermissionsIPWhitelist
+    ##  a list of ip addresses that will be whitelisted as having full
+    ##   write permissions on the volume servers volumes.
+    ##
+    ## Note: an empty list will indicate that no ip will be denied
+    ##       write permissions.
+    ##
+    writePermissionsIPWhitelist: []
+
+    ## @param volume.configuration.limits
+    ##
+    limits:
+      ## @param volume.configuration.limits.backgroundCompactionRate
+      ##  the maximum rate in MBs per second that background compaction
+      ##   or copying speed will be limited to.
+      ##
+      backgroundCompactionRate: 50
+      ## @param volume.configuration.limits.diskSpaceUtilization [required]
+      ##  the maximum amount of disk space utilization (as a percentage)
+      ##   that can be used before the volume will go into read-only mode.
+      ##
+      diskSpaceUtilization: 95.0
+      ## @param volume.configuration.limits.fileSize [required]
+      ##  the maximum supported file size in MB.
+      ##
+      ## Note: setting to high of a file size may lead to OOM errors.
+      ##
+      fileSize: 256
+
+      ## @param volume.configuration.limits.concurrency
+      ##  defines concurrency limitations for network io
+      ##
+      concurrency:
+        ## @param volume.configuration.limits.concurrency [required]
+        ##  specifies the maximum size in MB that concurrent
+        ##   downloads may reach
+        ##
+        downloadSize: 256
+        ## @param volume.configuration.limits.concurrency [required]
+        ##  specifies the maximum size in MB that concurrent
+        ##   uploads may reach
+        ##
+        uploadSize: 256
+
+    ## @param volume.configuration.ports
+    ##
+    ports:
+      ## @param volume.configuration.ports.grpc [required]
+      ##  Defines a port that the s3 server will receieve grpc traffic on.
+      ##
+      grpc: 18080
+      ## @param volume.configuration.ports.http [required]
+      ##  Defines a port that the s3 server will receieve https traffic on.
+      ##
+      http: 8080
+      ## @param volume.configuration.ports.metrics
+      ##  Defines a port that the s3 server will expose metrics on.
+      ##
+      metrics: 9237
+
+    ## @param volume.configuraiton.toplogy
+    ##  Defines configuration of the volume server topology, used for
+    ##   replication configuration acorss server components.
+    ##
+    topology:
+      ## @param volume.configuration.topology.dataCenterName [required]
+      ##  the name of the toplogical data center the volume server
+      ##   will be considered assigned to.
+      ##
+      dataCenterName: "dc1"
+      ## @param volume.configuration.topology.rackName [required]
+      ##  the name of the toplogical data center rack the volume server
+      ##   will be considered assigned to.
+      ##
+      rackName: "r1"
+
+  ## Enable persistence of volume data, indices, and logs using Persistent Volume Claims
+  ## ref: https://kubernetes.io/docs/user-guide/persistent-volumes/
+  ##
+  persistence:
+    data:
+      ## @param volume.persistence.data.enabled Enable volume data persistence using PVC
+      ##
+      enabled: true
+      ## @param volume.persistence.data.storageClass PVC Storage Class for volume data
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ## set, choosing the default provisioner.
+      ##
+      storageClass: ""
+
+      ## @param volume.persistence.data.volumes An array of volume details that will be used to
+      ##  create persistent volumes for seaweedfs volumes.
+      ##
+      volumes:
+        ## @param volume.persistence.data.volumes.*.name the name of the Persistent Volume
+        ## If undefined (the default) the volume will be assigned a name having the
+        ## following format:
+        ## `seaweedfs-volume-data-volume-{idx}`
+        ##
+        - name: ""
+          ## @param volume.persistence.data.volumes.*.existingClaim A manually managed Persistent Volume and Claim
+          ## If defined, PVC must be created manually before Volume will be bound
+          ## The value is evaluated as a template
+          ##
+          existingClaim: ""
+          ## @param volume.persistence.data.hostPathPrefix
+          ##  the prefix that will be used when creating the PV with the type of hostPath.
+          ##
+          hostPathPrefix: ""
+          ## @param volume.persistence.data.mountPath Mount path of the volume data volume
+          ##
+          mountPath: /data
+          storageClass: ""
+          ## @param volume.persistence.data.size PVC Storage Request for volume data
+          ##
+          size: 5Gi
+
+          ## @param volume.persistence.data.volumes.*.accessModes Persistent Volume Access Modes
+          ##
+          accessModes:
+          - ReadWriteOnce
+
+          ## @param volume.persistence.data.volumes.*.annotations Annotations for the PVC
+          ##
+          annotations: {}
+
+          ## @param volume.persistence.data.volumes.*.labels Labels for the PVC
+          ##
+          labels: {}
+
+          ## @param volume.persistence.data.volumes.*.selector Selector to match an existing Persistent Volume for
+          ##  volume data PVC.
+          ## If set, the PVC can't have a PV dynamically provisioned for it
+          ##
+          ## e.g.
+          ## selector:
+          ##   matchLabels:
+          ##     app: my-app
+          ##
+          selector: {}
+
+          ## @param volume.persistence.data.volumes.*.configuration
+          ##
+          configuration:
+            ## @param volume.persistence.data.volumes.*.configuration.limits
+            ##
+            limits:
+              ## @param volume.persistence.data.volumes.*.configuration.limits.maximumVolumeCount [required]
+              ##  the maximum amount of volumes allowed for this particular volume.
+              ##
+              maximumVolumeCount: 8
+
+    indices:
+      ## @param volume.persistence.indices.enabled Enable volume indices persistence using PVC
+      ##
+      enabled: true
+      ## @param volume.persistence.indices.accessModes Persistent Volume Access Modes
+      ##
+      accessModes:
+      - ReadWriteOnce
+      ## @param volume.persistence.indices.annotations Annotations for the PVC
+      ##
+      annotations: {}
+      ## @param volume.persistence.indices.existingClaim A manually managed Persistent Volume and Claim
+      ## If defined, PVC must be created manually before Volume will be bound
+      ## The value is evaluated as a template
+      ##
+      existingClaim: ""
+      ## @param volume.persistence.indices.hostPathPrefix
+      ##  the prefix that will be used when creating the PV with the type of hostPath.
+      ##
+      hostPathPrefix: ""
+      ## @param volume.persistence.indices.labels Labels for the PVC
+      ##
+      labels: {}
+      ## @param volume.persistence.indices.mountPath Mount path of the volume indices volume
+      ##
+      mountPath: /indices
+      ## @param volume.persistence.indices.selector Selector to match an existing Persistent Volume for volume indices PVC.
+      ## If set, the PVC can't have a PV dynamically provisioned for it
+      ##
+      ## e.g.
+      ## selector:
+      ##   matchLabels:
+      ##     app: my-app
+      ##
+      selector: {}
+      ## @param volume.persistence.indices.size PVC Storage Request for volume indices
+      ##
+      size: 5Gi
+      ## @param volume.persistence.indices.storageClass PVC Storage Class for volume indices
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ## set, choosing the default provisioner.
+      ##
+      storageClass: ""
+
+    logs:
+      ## @param volume.persistence.logs.enabled Enable volume logs persistence using PVC
+      ##
+      enabled: true
+      ## @param volume.persistence.indices.accessModes Persistent Volume Access Modes
+      ##
+      accessModes:
+      - ReadWriteOnce
+      ## @param volume.persistence.logs.annotations Annotations for the PVC
+      ##
+      annotations: {}
+      ## @param volume.persistence.logs.existingClaim A manually managed Persistent Volume and Claim
+      ## If defined, PVC must be created manually before Volume will be bound
+      ## The value is evaluated as a template
+      ##
+      existingClaim: ""
+      ## @param volume.persistence.logs.hostPathPrefix
+      ##  the prefix that will be used when creating the PV with the type of hostPath.
+      ##
+      hostPathPrefix: ""
+      ## @param volume.persistence.logs.labels Labels for the PVC
+      ##
+      labels: {}
+      ## @param volume.persistence.logs.mountPath Mount path of the volume logs volume
+      ##
+      mountPath: /logs
+      ## @param volume.persistence.logs.selector Selector to match an existing Persistent Volume for volume logs PVC.
+      ## If set, the PVC can't have a PV dynamically provisioned for it
+      ##
+      ## e.g.
+      ## selector:
+      ##   matchLabels:
+      ##     app: my-app
+      ##
+      selector: {}
+      ## @param volume.persistence.logs.size PVC Storage Request for volume logs
+      ##
+      size: 1Gi
+      ## @param volume.persistence.logs.storageClass PVC Storage Class for volume logs
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ## set, choosing the default provisioner.
+      ##
+      storageClass: ""
+
+  ## @param volume.podAnnotations Annotations for volume pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
+
 filer:
   enabled: true
   repository: null
@@ -411,66 +1104,17 @@ filer:
   imageOverride: null
   restartPolicy: null
   replicas: 1
-  port: 8888
-  grpcPort: 18888
-  metricsPort: 9327
   loggingOverrideLevel: null
-  filerGroup: ""
-  #  replication type is XYZ:
-  # X number of replica in other data centers
-  # Y number of replica in other racks in the same data center
-  # Z number of replica in other servers in the same rack
-  defaultReplicaPlacement: "000"
-  # turn off directory listing
-  disableDirListing: false
-  # split files larger than the limit, default 32
-  maxMB: null
-  # encrypt data on volume servers
-  encryptVolumeData: false
 
-  # Whether proxy or redirect to volume server during file GET request
-  redirectOnRead: false
+  # extraEnvVars is a list of extra enviroment variables to set with the stateful set.
+  extraEnvironmentVars:
+    # directories under this folder will be automatically creating a separate bucket
+    WEED_FILER_BUCKETS_FOLDER: "/buckets"
 
-  # Limit sub dir listing size (default 100000)
-  dirListLimit: 100000
+  initContainers: ""
 
-  # Disable http request, only gRpc operations are allowed
-  disableHttp: false
-
-  # DEPRECATE: enablePVC, storage, storageClass
-  # Consider replacing with filer.data section below instead.
-
-  # Settings for configuring stateful storage of filer pods.
-  # enablePVC will create a pvc for filer for data persistence.
-  enablePVC: false
-  # storage should be set to the disk size of the attached volume.
-  storage: 25Gi
-  # storageClass is the class of storage which defaults to null (the Kube cluster will pick the default).
-  storageClass: null
-  # You may use ANY storage-class, example with local-path-provisioner
-  # Annotations are optional.
-  #  data:
-  #    type: "persistentVolumeClaim"
-  #    size: "24Ti"
-  #    storageClass: "local-path-provisioner"
-  #    annotations:
-  #      "key": "value"
-  #
-  # You may also specify an existing claim:
-  #  data:
-  #    type: "existingClaim"
-  #    claimName: "my-pvc"
-  data:
-    type: "hostPath"
-    size: ""
-    storageClass: ""
-    hostPathPrefix: /storage
-
-  logs:
-    type: "hostPath"
-    size: ""
-    storageClass: ""
-    hostPathPrefix: /storage
+  extraVolumes: ""
+  extraVolumeMounts: ""
 
   ## @param filer.sidecars Add additional sidecar containers to the filer pod(s)
   ## e.g:
@@ -483,10 +1127,6 @@ filer:
   ##         containerPort: 1234
   ##
   sidecars: []
-  initContainers: ""
-
-  extraVolumes: ""
-  extraVolumeMounts: ""
 
   ## Set podManagementPolicy
   podManagementPolicy: Parallel
@@ -535,49 +1175,6 @@ filer:
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccountName: ""
 
-  ingress:
-    enabled: false
-    className: "nginx"
-    # host: false for "*" hostname
-    host: "seaweedfs.cluster.local"
-    annotations: |
-      nginx.ingress.kubernetes.io/backend-protocol: GRPC
-      nginx.ingress.kubernetes.io/auth-type: "basic"
-      nginx.ingress.kubernetes.io/auth-secret: "default/ingress-basic-auth-secret"
-      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required - SW-Filer'
-      nginx.ingress.kubernetes.io/service-upstream: "true"
-      nginx.ingress.kubernetes.io/rewrite-target: /$1
-      nginx.ingress.kubernetes.io/use-regex: "true"
-      nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
-      nginx.ingress.kubernetes.io/ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/configuration-snippet: |
-        sub_filter '<head>' '<head> <base href="/sw-filer/">'; #add base url
-        sub_filter '="/' '="./';                               #make absolute paths to relative
-        sub_filter '=/' '=./';
-        sub_filter '/seaweedfsstatic' './seaweedfsstatic';
-        sub_filter_once off;
-
-  # extraEnvVars is a list of extra enviroment variables to set with the stateful set.
-  extraEnvironmentVars:
-    WEED_MYSQL_ENABLED: "false"
-    WEED_MYSQL_HOSTNAME: "mysql-db-host"
-    WEED_MYSQL_PORT: "3306"
-    WEED_MYSQL_DATABASE: "sw_database"
-    WEED_MYSQL_CONNECTION_MAX_IDLE: "5"
-    WEED_MYSQL_CONNECTION_MAX_OPEN: "75"
-    # "refresh" connection every 10 minutes, eliminating mysql closing "old" connections
-    WEED_MYSQL_CONNECTION_MAX_LIFETIME_SECONDS: "600"
-    # enable usage of memsql as filer backend
-    WEED_MYSQL_INTERPOLATEPARAMS: "true"
-    # if you want to use leveldb2, then should enable "enablePVC". or you may lose your data.
-    WEED_LEVELDB2_ENABLED: "true"
-    # with http DELETE, by default the filer would check whether a folder is empty.
-    # recursive_delete will delete all sub folders and files, similar to "rm -Rf"
-    WEED_FILER_OPTIONS_RECURSIVE_DELETE: "false"
-    # directories under this folder will be automatically creating a separate bucket
-    WEED_FILER_BUCKETS_FOLDER: "/buckets"
-
   # used to configure livenessProbe on filer containers
   #
   livenessProbe:
@@ -615,53 +1212,307 @@ filer:
       #     name: postgres-credentials
       #     key: password
 
-  s3:
+  ## @param filer.auth [object] Defines auth related options for the filer server.
+  ##
+  auth:
+    ## @param filer.auth.store
+    ##
+    ## Note: store auth is ignored if the filer's store is not configured.
+    ##       see @param filer.configuration.store
+    ##
+    store:
+      ## @param filer.auth.store.credentials
+      ##  if defined, a secret will be created containing the credentials for
+      ##   the store and injected into the filer.toml configuration file for
+      ##   the store's configuration section.
+      ##
+      ## Note: credentials will be ignored if an existing secret is provided.
+      ##       see @param filer.auth.store.existingCredentialsSecret below
+      ##
+      credentials:
+        username: ""
+        password: ""
+
+      ## @param filer.auth.store.credentialsExistingSecret
+      ##  specifies the name of an existing secret that will be used to source
+      ##   the `username` and `password` for the filer's store.
+      ##
+      credentialsExistingSecret: ""
+
+  ## @param filer.configuration Configuration for the filer server component.
+  ##
+  configuration:
+    ## @param filer.configuration.disableDirectoryListing
+    ##
+    disableDirectoryListing: false
+    ## @param filer.configuration.encryptVolumeData
+    ##
+    encryptVolumeData: false
+    ## @param filer.configuration.groupName [required]
+    ##  the name of the filer group.
+    ##
+    ## Note: all filers within the same group share their metadata.
+    ##
+    groupName: ""
+    ## @param filer.configuration.redirectReadsToVolumeServer
+    ##  Specifies whether GET requestss to the filer should be (proxied)
+    ##   redirected to the volume server
+    ##
+    redirectReadsToVolumeServer: false
+
+    ## @param filer.configuration.dbSchema
+    ##
+    dbSchema:
+      imageName: ""
+      imageOverride: ""
+      imageTag: ""
+
+    ## @param filer.configuration.limits
+    ##
+    limits:
+      ## @param filer.configuration.limits.directoryListingSize [required]
+      ##  the maximum number of items that will be listed for a direcotry.
+      ##
+      directoryListingSize: 100000
+      ## @param filer.configuration.limits.fileChunkSize [required]
+      ##  the maximum size (in MB) that a file may be before it is chunked.
+      ##
+      fileChunkSize: 32
+
+    ## @param filer.configuration.options Defines configuration options for the filer
+    ##
+    options:
+      ## @param filer.configuration.options.tomlContents [string] Contains the toml-formatted
+      ##  contents that will be injected into the `filer.toml` configuration file's `filer.options`
+      ##  table.
+      ## e.g.
+      ## tomlContents: |-
+      ##   recursive_delete = false
+      ##
+      tomlContents: ""
+
+    ## @param filer.configuration.ports
+    ##
+    ports:
+      ## @param filer.configuration.ports.grpc [required]
+      ##  Defines a port that the filer will receieve grpc traffic on.
+      ##
+      grpc: 18888
+      ## @param filer.configuration.ports.http
+      ##  Defines a port that the filer will receieve https traffic on.
+      ##
+      ##  Note: this may be set to `false` or an empty string to disable
+      ##        http traffic.
+      ##
+      http: 8888
+      ## @param filer.configuration.ports.metrics
+      ##  Defines a port that the filer will expose metrics on.
+      ##
+      metrics: 9237
+
+    ## @ param filer.configuration.store Defines the configuration of the filer's store.
+    ##
+    store:
+      ## @param filer.configuration.store.sectionNameForConfigurationFileStoreSection
+      ##  specifies the name of the supported storage mechanism that the filer will be
+      ##   confiured for.
+      ##
+      ## Note: as the property name implies, this value should contain the configuration
+      ##       section headerer name featured in the filer.toml file.
+      ##
+      ## e.g.
+      ## sectionNameForConfigurationFileStoreSection: "redis_cluster3"
+      ##
+      sectionNameForConfigurationFileStoreSection: ""
+      ## @param filer.configuration.store.tomlContentsForConfigurationFileStoreSection
+      ##  the toml formatted contents that will be injected into configuration section
+      ##   for the store in the `filer.toml` configuration file.
+      ##
+      ## e.g.
+      ## tomlContentsForConfigurationFileStoreSection: |-
+      ##   enabled = true
+      ##   hostname = "database.seawedfs.svc.cluster.local"
+      ##   ...
+      ##
+      tomlContentsForConfigurationFileStoreSection: ""
+
+  ## Enable ingress for the filer seaweedfs component
+  ##
+  ingress:
+    ## @param filer.ingress.enabled
+    ##
     enabled: false
-    port: 8333
-    # add additional https port
-    httpsPort: 0
-    # allow empty folders
-    allowEmptyFolder: false
-    # Suffix of the host name, {bucket}.{domainName}
-    domainName: ""
-    # enable user & permission to s3 (need to inject to all services)
-    enableAuth: false
-    # set to the name of an existing kubernetes Secret with the s3 json config file
-    # should have a secret key called seaweedfs_s3_config with an inline json configure
-    existingConfigSecret: null
-    auditLogConfig: {}
-    # You may specify buckets to be created during the install process.
-    # Buckets may be exposed publicly by setting `anonymousRead` to `true`
-    # createBuckets:
-    #   - name: bucket-a
-    #     anonymousRead: true
-    #   - name: bucket-b
-    #     anonymousRead: false
+
+    ## @param master.ingress.className
+    ##
+    className: "nginx"
+    ## @param filer.ingress.hostname
+    ##
+    hostname: "seaweedfs-filer.seaweedfs.svc.cluster.local"
+
+    ## @param filer.ingress.annotations
+    ##
+    annotations: |
+      nginx.ingress.kubernetes.io/backend-protocol: GRPC
+      nginx.ingress.kubernetes.io/auth-type: "basic"
+      nginx.ingress.kubernetes.io/auth-secret: "default/ingress-basic-auth-secret"
+      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required - SW-Filer'
+      nginx.ingress.kubernetes.io/service-upstream: "true"
+      nginx.ingress.kubernetes.io/rewrite-target: /$1
+      nginx.ingress.kubernetes.io/use-regex: "true"
+      nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
+      nginx.ingress.kubernetes.io/configuration-snippet: |
+        sub_filter '<head>' '<head> <base href="/sw-filer/">'; #add base url
+        sub_filter '="/' '="./';                               #make absolute paths to relative
+        sub_filter '=/' '=./';
+        sub_filter '/seaweedfsstatic' './seaweedfsstatic';
+        sub_filter_once off;
+
+    ## @param filer.ingress.extraHosts An array with additional hostname(s) to be covered
+    ##        by ingress
+    ##
+    ## Note: this value is evaluated as a template
+    ##
+    extraHosts: []
+
+    ## @param master.ingress.tls
+    ##
+    tls: []
+
+  ## Enable persistence of filer data and logs using Persistent Volume Claims
+  ## ref: https://kubernetes.io/docs/user-guide/persistent-volumes/
+  ##
+  persistence:
+    data:
+      ## @param filer.persistence.data.enabled Enable filer data persistence using PVC
+      ##
+      ## Note: data persistence is Ignored if @param filer.configuration.store.enabled
+      ##       is set to true.
+      ##
+      enabled: true
+      ## @param filer.persistence.indices.accessModes Persistent Volume Access Modes
+      ##
+      accessModes:
+      - ReadWriteOnce
+      ## @param controller.persistence.annotations Annotations for the PVC
+      ##
+      annotations: {}
+      ## @param filer.persistence.data.existingClaim A manually managed Persistent Volume and Claim
+      ## If defined, PVC must be created manually before Volume will be bound
+      ## The value is evaluated as a template
+      ##
+      existingClaim: ""
+      ## @param filer.persistence.data.hostPathPrefix
+      ##  the prefix that will be used when creating the PV with the type of hostPath.
+      ##
+      hostPathPrefix: ""
+      ## @param controller.persistence.labels Labels for the PVC
+      ##
+      labels: {}
+      ## @param controller.persistence.mountPath Mount path of the filer data volume
+      ##
+      mountPath: /data
+      ## @param controller.persistence.selector Selector to match an existing Persistent Volume for filer data PVC.
+      ## If set, the PVC can't have a PV dynamically provisioned for it
+      ##
+      ## e.g.
+      ## selector:
+      ##   matchLabels:
+      ##     app: my-app
+      ##
+      selector: {}
+      ## @param controller.persistence.size PVC Storage Request for filer data
+      ##
+      size: 5Gi
+      ## @param filer.persistence.data.storageClass PVC Storage Class for filer data
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ## set, choosing the default provisioner.
+      ##
+      storageClass: ""
+
+    logs:
+      ## @param filer.persistence.logs.enabled Enable filer logs persistence using PVC
+      ##
+      enabled: true
+      ## @param filer.persistence.indices.accessModes Persistent Volume Access Modes
+      ##
+      accessModes:
+      - ReadWriteOnce
+      ## @param controller.persistence.annotations Annotations for the PVC
+      ##
+      annotations: {}
+      ## @param filer.persistence.logs.existingClaim A manually managed Persistent Volume and Claim
+      ## If defined, PVC must be created manually before Volume will be bound
+      ## The value is evaluated as a template
+      ##
+      existingClaim: ""
+      ## @param filer.persistence.logs.hostPathPrefix
+      ##  the prefix that will be used when creating the PV with the type of hostPath.
+      ##
+      hostPathPrefix: ""
+      ## @param controller.persistence.labels Labels for the PVC
+      ##
+      labels: {}
+      ## @param controller.persistence.mountPath Mount path of the filer logs volume
+      ##
+      mountPath: /logs
+      ## @param controller.persistence.selector Selector to match an existing Persistent Volume for filer logs PVC.
+      ## If set, the PVC can't have a PV dynamically provisioned for it
+      ##
+      ## e.g.
+      ## selector:
+      ##   matchLabels:
+      ##     app: my-app
+      ##
+      selector: {}
+      ## @param controller.persistence.size PVC Storage Request for filer logs
+      ##
+      size: 1Gi
+      ## @param filer.persistence.logs.storageClass PVC Storage Class for filer logs
+      ## If defined, storageClassName: <storageClass>
+      ## If set to "-", storageClassName: "", which disables dynamic provisioning
+      ## If undefined (the default) or set to null, no storageClassName spec is
+      ## set, choosing the default provisioner.
+      ##
+      storageClass: ""
+
+  ## @param master.podAnnotations Annotations for filer pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
+
+  ## @param filer.s3 [object] Defines configuration options for the filer server's
+  ##  s3 capabilities.
+  ##
+  s3Gateway:
+    ## @param filer.s3.enabled Specifies whether the filer should enable its s3
+    ##  gateway capabilities.
+    ##
+    ## Note: this option is ignored if the `s3` server component is enabled.
+    ##
+    enabled: true
 
 s3:
   enabled: false
   repository: null
   imageName: null
+  imageOverride: null
   imageTag: null
   restartPolicy: null
   replicas: 1
   bindAddress: 0.0.0.0
-  port: 8333
-  # add additional https port
-  httpsPort: 0
-  metricsPort: 9327
   loggingOverrideLevel: null
-  # allow empty folders
-  allowEmptyFolder: true
-  # enable user & permission to s3 (need to inject to all services)
-  enableAuth: false
-  # set to the name of an existing kubernetes Secret with the s3 json config file
-  # should have a secret key called seaweedfs_s3_config with an inline json config
-  existingConfigSecret: null
-  auditLogConfig: {}
 
-  # Suffix of the host name, {bucket}.{domainName}
-  domainName: ""
+  extraEnvironmentVars: []
+
+  initContainers: ""
+
+  extraVolumes: ""
+  extraVolumeMounts: ""
 
   ## @param s3.sidecars Add additional sidecar containers to the s3 pod(s)
   ## e.g:
@@ -674,10 +1525,6 @@ s3:
   ##         containerPort: 1234
   ##
   sidecars: []
-  initContainers: ""
-
-  extraVolumes: ""
-  extraVolumeMounts: ""
 
   # Resource requests, limits, etc. for the server cluster placement. This
   # should map directly to the value of the resources field for a PodSpec,
@@ -706,14 +1553,6 @@ s3:
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccountName: ""
 
-  logs:
-    type: "hostPath"
-    size: ""
-    storageClass: ""
-    hostPathPrefix: /storage
-
-  extraEnvironmentVars:
-
   # used to configure livenessProbe on s3 containers
   #
   livenessProbe:
@@ -740,14 +1579,21 @@ s3:
     failureThreshold: 100
     timeoutSeconds: 10
 
-  ingress:
-    enabled: false
-    className: "nginx"
-    # host: false for "*" hostname
-    host: "seaweedfs.cluster.local"
-    # additional ingress annotations for the s3 endpoint
-    annotations: []
-    tls: []
+  ## @param s3.configuration Configuration for the s3 server component.
+  ##
+  configuration:
+    ## @param s3.configuration.ports
+    ##
+    ports:
+      ## @param s3.configuration.ports.metrics
+      ##  Defines a port that the s3 server will expose metrics on.
+      ##
+      metrics: 9237
+
+  ## @param master.podAnnotations Annotations for s3 pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
 
 certificates:
   commonName: "SeaweedFS CA"
@@ -756,13 +1602,9 @@ certificates:
   keySize: 2048
   duration: 2160h  # 90d
   renewBefore: 360h  # 15d
+
   externalCertificates:
     # This will avoid the need to use cert-manager and will rely on providing your own external certificates and CA
     # you will need to store your provided certificates in the secret read by the different services:
     # seaweedfs-master-cert, seaweedfs-filer-cert, etc. Can see any statefulset definition to see secret names
     enabled: false
-
-# Labels to be added to all the created pods
-podLabels: {}
-# Annotations to be added to all the created pods
-podAnnotations: {}

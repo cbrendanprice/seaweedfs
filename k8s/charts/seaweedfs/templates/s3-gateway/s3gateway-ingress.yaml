@@ -1,0 +1,53 @@
+{{- if and (or .Values.filer.s3Gateway.enabled .Values.s3.enabled) .Values.global.s3Gateway.ports.http .Values.global.s3Gateway.ingress.enabled }}
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: networking.k8s.io/v1
+{{- else if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion }}
+apiVersion: networking.k8s.io/v1beta1
+{{- else }}
+apiVersion: extensions/v1beta1
+{{- end }}
+kind: Ingress
+metadata:
+  name: ingress-{{ template "seaweedfs.name" . }}-s3-gateway
+  namespace: {{ .Release.Namespace }}
+  {{- with .Values.global.s3Gateway.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: s3-gateway
+spec:
+  ingressClassName: {{ .Values.global.s3Gateway.ingress.className | quote }}
+  tls:
+    {{ .Values.global.s3Gateway.ingress.tls | default list | toYaml | nindent 6}}
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: ImplementationSpecific
+        backend:
+{{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
+          service:
+            name: {{ template "seaweedfs.name" . }}-s3-gateway
+            port:
+              number: {{ .Values.global.s3Gateway.port }}
+              #name:
+{{- else }}
+          {{- if .Values.s3.enabled }}
+          serviceName: {{ template "seaweedfs.name" . }}-s3
+          {{- else }}
+          serviceName: {{ template "seaweedfs.name" . }}-filer
+          {{- end }}
+          servicePort: {{ .Values.global.s3Gateway.ports.http }}
+{{- end }}
+{{- if .Values.global.s3Gateway.ingress.hostname }}
+    host: {{ .Values.global.s3Gateway.ingress.hostname }}
+{{- end }}
+{{- if .Values.filer.ingress.extraHosts }}
+{{ tpl .Values.filer.ingress.extraHosts . | nindent 2 | trim }}
+{{- end }}
+{{- end }}

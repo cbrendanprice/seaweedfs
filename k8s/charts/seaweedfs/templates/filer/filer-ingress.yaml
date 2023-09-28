@@ -1,5 +1,4 @@
-{{- if .Values.filer.enabled }}
-{{- if .Values.filer.ingress.enabled }}
+{{- if and .Values.filer.enabled .Values.filer.configuration.ports.http .Values.filer.ingress.enabled }}
 {{- if semverCompare ">=1.19-0" .Capabilities.KubeVersion.GitVersion }}
 apiVersion: networking.k8s.io/v1
 {{- else if semverCompare ">=1.14-0" .Capabilities.KubeVersion.GitVersion }}
@@ -16,11 +15,11 @@ metadata:
     {{ tpl .Values.filer.ingress.annotations . | nindent 4 | trim }}
   {{- end }}
   labels:
+    app.kubernetes.io/component: filer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: filer
 spec:
   ingressClassName: {{ .Values.filer.ingress.className | quote }}
   tls:
@@ -35,14 +34,16 @@ spec:
           service:
             name: {{ template "seaweedfs.name" . }}-filer
             port:
-              number: {{ .Values.filer.port }}
+              number: {{ .Values.filer.configuration.ports.http }}
               #name:
 {{- else }}
           serviceName: {{ template "seaweedfs.name" . }}-filer
-          servicePort: {{ .Values.filer.port }}
+          servicePort: {{ .Values.filer.configuration.ports.http }}
 {{- end }}
-{{- if .Values.filer.ingress.host }}
-    host: {{ .Values.filer.ingress.host }}
+{{- if .Values.filer.ingress.hostname }}
+    host: {{ .Values.filer.ingress.hostname }}
 {{- end }}
+{{- if .Values.filer.ingress.extraHosts }}
+{{ tpl .Values.filer.ingress.extraHosts . | nindent 2 | trim }}
 {{- end }}
 {{- end }}

@@ -1,0 +1,31 @@
+{{- if .Values.filer.enabled }}
+{{- $filerStoreConfigured := and .Values.filer.configuration.store.sectionNameForConfigurationFileStoreSection .Values.filer.configuration.store.tomlContentsForConfigurationFileStoreSection }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: filer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: '{{ template "seaweedfs.name" . }}-filer-configuration'
+  namespace: {{ .Release.Namespace }}
+data:
+  filer.toml: |-
+    [filer.options]
+    {{- if .Values.filer.configuration.options.toml }}
+    {{ .Values.filer.configuration.options.toml | nindent 4 | trim }}
+    {{- else }}
+    recursive_delete = false
+    {{- end }}
+
+    {{- if $filerStoreConfigured }}
+    [{{- .Values.filer.configuration.store.sectionNameForConfigurationFileStoreSection | lower | trim }}]
+    {{ .Values.filer.configuration.store.tomlContentsForConfigurationFileStoreSection | nindent 4 | trim }}
+    {{- else }}
+    [leveldb2]
+    enabled = true
+    dir = "{{ if .Values.filer.persistence.data.enabled }}{{ .Values.filer.persistence.data.mountPath }}{{ else }}/data{{ end }}/filerldb2"
+    {{- end }}
+{{- end }}

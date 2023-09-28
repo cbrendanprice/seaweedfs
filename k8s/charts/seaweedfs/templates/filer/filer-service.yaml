@@ -1,0 +1,50 @@
+{{- if .Values.filer.enabled }}
+{{- $ports := .Values.master.configuration.ports }}
+{{- $s3GatewayEnabled := and .Values.filer.s3Gateway.enabled (not .Values.s3.enabled) }}
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+  labels:
+    app.kubernetes.io/component: filer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: {{ template "seaweedfs.name" . }}-filer
+  namespace: {{ .Release.Namespace }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: "swfs-filer"
+    port: {{ $ports.http }}
+    targetPort: {{ $ports.http }}
+    protocol: TCP
+  - name: "swfs-filer-grpc"
+    port: {{ $ports.grpc }}
+    targetPort: {{ $ports.grpc }}
+    protocol: TCP
+  {{- if $s3GatewayEnabled }}
+  - name: "swfs-s3"
+    port: {{ .Values.global.s3Gateway.ports.http }}
+    targetPort: {{ .Values.global.s3Gateway.ports.http }}
+    protocol: TCP
+  {{- if and .Values.global.tls.enabled .Values.global.s3Gateway.ports.https }}
+  - name: "swfs-s3-tls"
+    port: {{ .Values.global.s3Gateway.ports.https }}
+    targetPort: {{ .Values.global.s3Gateway.ports.https }}
+    protocol: TCP
+  {{- end }}
+  {{- end }}
+  {{- if and .Values.global.monitoring.enabled $ports.metrics }}
+  - name: "metrics"
+    port: {{ $ports.metrics }}
+    targetPort: {{ $ports.metrics }}
+    protocol: TCP
+  {{- end }}
+  selector:
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    app.kubernetes.io/component: filer
+{{- end }}

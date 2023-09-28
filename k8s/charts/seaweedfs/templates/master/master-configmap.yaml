@@ -5,11 +5,11 @@ metadata:
   name: {{ template "seaweedfs.name" . }}-master-config
   namespace: {{ .Release.Namespace }}
   labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
     app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
     helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-    app.kubernetes.io/managed-by: {{ .Release.Service }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
 data:
   master.toml: |-
-    {{ .Values.master.config | nindent 4 }}
+    {{ .Values.master.configuration.file.tomlContents | nindent 4 }}
 {{- end }}

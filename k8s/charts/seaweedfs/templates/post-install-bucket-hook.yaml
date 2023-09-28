@@ -1,6 +1,5 @@
-{{- if .Values.master.enabled }}
-{{- if .Values.filer.s3.enabled }}
-{{- if .Values.filer.s3.createBuckets }}
+{{- $s3Buckets := .Values.global.s3Gateway.buckets }}
+{{- if and .Values.master.enabled (or .Values.filer.s3Gateway.enabled .Values.s3.enabled) $s3Buckets }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -50,12 +49,12 @@ spec:
           - "/bin/sh"
           - "-ec"
           - |
-          {{- range $reg, $props := $.Values.filer.s3.createBuckets }}
+          {{- range $reg, $props := $s3Buckets }}
             exec /bin/echo \
             "s3.bucket.create --name {{ $props.name }}" |\
             /usr/bin/weed shell
           {{- end }}
-          {{- range $reg, $props := $.Values.filer.s3.createBuckets }}
+          {{- range $reg, $props := $s3Buckets }}
           {{- if $props.anonymousRead }}
             exec /bin/echo \
             "s3.configure --user anonymous \
@@ -65,32 +64,30 @@ spec:
                 /usr/bin/weed shell
           {{- end }}  
           {{- end }}
-        {{- if .Values.filer.s3.enableAuth }}
+        {{- if .Values.global.s3Gateway.auth.enabled }}
         volumeMounts:
           - name: config-users
             mountPath: /etc/sw
             readOnly: true
         {{- end }}
         ports:
-          - containerPort: {{ .Values.master.port }}
+          - containerPort: {{ .Values.master.configuration.ports.http }}
             name: swfs-master
-          {{- if and .Values.global.monitoring.enabled .Values.master.metricsPort }}
-          - containerPort: {{ .Values.master.metricsPort }}
+          {{- if and .Values.global.monitoring.enabled .Values.master.configuration.ports.metrics }}
+          - containerPort: {{ .Values.master.configuration.ports.metrics }}
             name: metrics
           {{- end }}
-          - containerPort: {{ .Values.master.grpcPort }}
+          - containerPort: {{ .Values.master.configuration.ports.grpc }}
             #name: swfs-master-grpc
-    {{- if .Values.filer.s3.enableAuth }}
+    {{- if .Values.global.s3Gateway.auth.enabled }}
       volumes:
         - name: config-users
           secret:
             defaultMode: 420
-            {{- if not (empty .Values.filer.s3.existingConfigSecret) }}
-            secretName: {{ .Values.filer.s3.existingConfigSecret }}
+            {{- if not (empty .Values.global.s3Gateway.auth.existingBucketUserConfigSecret) }}
+            secretName: {{ .Values.global.s3Gateway.auth.existingBucketUserConfigSecret }}
             {{- else }}
             secretName: seaweedfs-s3-secret
             {{- end }}
-    {{- end }}{{/** if .Values.filer.s3.enableAuth **/}}
-{{- end }}{{/** if .Values.master.enabled **/}}
-{{- end }}{{/** if .Values.filer.s3.enabled **/}}
-{{- end }}{{/** if .Values.filer.s3.createBuckets **/}}
+    {{- end }}
+{{- end }}

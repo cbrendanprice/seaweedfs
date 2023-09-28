@@ -1,0 +1,64 @@
+{{- if .Values.filer.ingress.enabled }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  {{- if .Values.filer.ingress.annotations }}
+  annotations:
+    {{ toYaml .Values.filer.ingress.annotations | nindent 4 | trim }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/component: filer
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: {{ template "seaweedfs.name" . }}-filer-vs
+  namespace: {{ .Release.Namespace }}
+spec:
+  gateways:
+  - istio-ingress/istio-ingress-public-gw
+  hosts:
+  - {{ .Values.filer.ingress.hostname }}
+  {{- range .Values.filer.ingress.extraHosts }}
+  - {{ . }}
+  {{- end }}
+  http:
+  - route:
+    - destination:
+        host: '{{ template "seaweedfs.name" . }}-filer.{{ .Release.Service }}.svc.cluster.local'
+        port:
+          number: {{ .Values.filer.port }}
+{{- end }}
+{{- if .Values.master.ingress.enabled }}
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  {{- if .Values.master.ingress.annotations }}
+  annotations:
+    {{ toYaml .Values.master.ingress.annotations | nindent 4 | trim }}
+  {{- end }}
+  labels:
+    app.kubernetes.io/component: master
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: {{ template "seaweedfs.name" . }}-master-vs
+  namespace: {{ .Release.Namespace }}
+spec:
+  gateways:
+  - istio-ingress/istio-ingress-public-gw
+  hosts:
+  - {{ .Values.master.ingress.hostname }}
+  {{- range .Values.master.ingress.extraHosts }}
+  - {{ . }}
+  {{- end }}
+  http:
+  - route:
+    - destination:
+        host: '{{ template "seaweedfs.name" . }}-master.{{ .Release.Service }}.svc.cluster.local'
+        port:
+          number: {{ .Values.master.port }}
+{{- end }}

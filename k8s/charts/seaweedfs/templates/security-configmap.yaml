@@ -1,4 +1,4 @@
-{{- if .Values.global.enableSecurity }}
+{{- if .Values.global.tls.enabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -18,28 +18,26 @@ data:
     [jwt.signing]
     key = "{{ randAlphaNum 10 | b64enc }}"
 
-    # all grpc tls authentications are mutual
-    # the values for the following ca, cert, and key are paths to the PERM files.
     [grpc]
-    ca = "/usr/local/share/ca-certificates/ca/tls.crt"
+    ca = "/usr/local/share/ca-certificate/tls.crt"
 
     [grpc.volume]
-    cert = "/usr/local/share/ca-certificates/volume/tls.crt"
-    key  = "/usr/local/share/ca-certificates/volume/tls.key"
+    cert = "/usr/local/share/ca-certificate/tls.crt"
+    key  = "/usr/local/share/ca-certificate/tls.key"
 
     [grpc.master]
-    cert = "/usr/local/share/ca-certificates/master/tls.crt"
-    key  = "/usr/local/share/ca-certificates/master/tls.key"
+    cert = "/usr/local/share/ca-certificate/tls.crt"
+    key  = "/usr/local/share/ca-certificate/tls.key"
 
     [grpc.filer]
-    cert = "/usr/local/share/ca-certificates/filer/tls.crt"
-    key  = "/usr/local/share/ca-certificates/filer/tls.key"
+    cert = "/usr/local/share/ca-certificate/tls.crt"
+    key  = "/usr/local/share/ca-certificate/tls.key"
 
     # use this for any place needs a grpc client
     # i.e., "weed backup|benchmark|filer.copy|filer.replicate|mount|s3|upload"
     [grpc.client]
-    cert = "/usr/local/share/ca-certificates/client/tls.crt"
-    key  = "/usr/local/share/ca-certificates/client/tls.key"
+    cert = "/usr/local/share/ca-certificate/tls.crt"
+    key  = "/usr/local/share/ca-certificate/tls.key"
 
     # volume server https options
     # Note: work in progress!

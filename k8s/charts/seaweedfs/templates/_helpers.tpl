@@ -127,7 +127,7 @@ Inject extra environment vars in the format key:value, if populated
 {{- if or (or (eq .Values.volume.data.type "hostPath") (and (eq .Values.volume.idx.type "hostPath") .Values.volume.dir_idx )) (eq .Values.volume.logs.type "hostPath") -}}
 {{- printf "true" -}}
 {{- else -}}
-{{- if or .Values.global.enableSecurity .Values.volume.extraVolumes -}}
+{{- if or .Values.global.tls.enabled .Values.volume.extraVolumes -}}
 {{- printf "true" -}}
 {{- else -}}
 {{- printf "false" -}}
@@ -167,7 +167,7 @@ Inject extra environment vars in the format key:value, if populated
 {{- if or (eq .Values.master.data.type "hostPath") (eq .Values.master.logs.type "hostPath") -}}
 {{- printf "true" -}}
 {{- else -}}
-{{- if or .Values.global.enableSecurity .Values.volume.extraVolumes -}}
+{{- if or .Values.global.tls.enabled .Values.volume.extraVolumes -}}
 {{- printf "true" -}}
 {{- else -}}
 {{- printf "false" -}}

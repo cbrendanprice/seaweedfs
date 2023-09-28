@@ -1,0 +1,101 @@
+{{- if .Values.global.tls.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: seaweedfs-internal-ca
+  namespace: {{ .Release.Namespace }}
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: seaweedfs-internal-ca
+  namespace: {{ .Release.Namespace }}
+rules:
+  - apiGroups: [""]
+    resourceNames: ["seaweedfs-internal-ca"]
+    resources: ["serviceaccounts/token"]
+    verbs: ["create"]
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: system:serviceaccount:seaweedfs-internal-ca:default
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+subjects:
+- kind: ServiceAccount
+  name: cert-manager
+  namespace: cert-manager
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: seaweedfs-internal-ca
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: internal-ca
+  namespace: {{ .Release.Namespace }}
+spec:
+  vault:
+    auth:
+      kubernetes:
+        mountPath: /v1/auth/kubernetes
+        role: internal-ca
+        serviceAccountRef:
+          name: seaweedfs-internal-ca
+    path: pki/sign/internal-ca
+    server: http://vault.vault.svc.cluster.local:8200
+---
+{{- if (not .Values.global.tls.existingSecret )}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: '{{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}'
+  name: '{{ template "seaweedfs.name" . }}-certificate'
+  namespace: {{ .Release.Namespace }}
+spec:
+  dnsNames:
+  - '*.{{ .Release.Namespace }}'
+  - '*.{{ .Release.Namespace }}.svc'
+  - '*.{{ .Release.Namespace }}.svc.cluster.local'
+  - '*.{{ template "seaweedfs.name" . }}-master'
+  - '*.{{ template "seaweedfs.name" . }}-master.{{ .Release.Namespace }}'
+  - '*.{{ template "seaweedfs.name" . }}-master.{{ .Release.Namespace }}.svc'
+  - '*.{{ template "seaweedfs.name" . }}-master.{{ .Release.Namespace }}.svc.cluster.local'
+  duration: 24h
+{{- if .Values.certificates.ipAddresses }}
+  ipAddresses:
+    {{- range .Values.certificates.ipAddresses }}
+    - {{ . }}
+    {{- end }}
+{{- end }}
+  issuerRef:
+    name: internal-ca
+  renewBefore: 12h
+  secretName: '{{ template "seaweedfs.name" . }}-certificate-tls'
+{{- end }}
+{{- end }}

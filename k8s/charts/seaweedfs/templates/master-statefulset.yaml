@@ -27,6 +27,10 @@ spec:
       app.kubernetes.io/component: master
   template:
     metadata:
+      {{- if .Values.master.podAnnotations }}
+      annotations:
+        {{ toYaml .Values.master.podAnnotations | nindent 8 | trim }}
+      {{- end }}
       labels:
         app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
         helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
@@ -146,26 +150,14 @@ spec:
               readOnly: true
               mountPath: /etc/seaweedfs/master.toml
               subPath: master.toml
-            {{- if .Values.global.enableSecurity }}
+            {{- if .Values.global.tls.enabled }}
             - name: security-config
               readOnly: true
               mountPath: /etc/seaweedfs/security.toml
               subPath: security.toml
-            - name: ca-cert
+            - name: tls-cert
               readOnly: true
-              mountPath: /usr/local/share/ca-certificates/ca/
-            - name: master-cert
-              readOnly: true
-              mountPath: /usr/local/share/ca-certificates/master/
-            - name: volume-cert
-              readOnly: true
-              mountPath: /usr/local/share/ca-certificates/volume/
-            - name: filer-cert
-              readOnly: true
-              mountPath: /usr/local/share/ca-certificates/filer/
-            - name: client-cert
-              readOnly: true
-              mountPath: /usr/local/share/ca-certificates/client/
+              mountPath: /usr/local/share/ca-certificate/
             {{- end }}
             {{ tpl .Values.master.extraVolumeMounts . | nindent 12 | trim }}
           ports:
@@ -223,25 +215,13 @@ spec:
         - name: master-config
           configMap:
             name: {{ template "seaweedfs.name" . }}-master-config
-        {{- if .Values.global.enableSecurity }}
+        {{- if .Values.global.tls.enabled }}
         - name: security-config
           configMap:
             name: {{ template "seaweedfs.name" . }}-security-config
-        - name: ca-cert
+        - name: tls-cert
           secret:
-            secretName: {{ template "seaweedfs.name" . }}-ca-cert
-        - name: master-cert
-          secret:
-            secretName: {{ template "seaweedfs.name" . }}-master-cert
-        - name: volume-cert
-          secret:
-            secretName: {{ template "seaweedfs.name" . }}-volume-cert
-        - name: filer-cert
-          secret:
-            secretName: {{ template "seaweedfs.name" . }}-filer-cert
-        - name: client-cert
-          secret:
-            secretName: {{ template "seaweedfs.name" . }}-client-cert
+            secretName: {{ if .Values.global.tls.existingSecret }}{{ .Values.global.tls.existingSecret }}{{ else }}{{ template "seaweedfs.name" . }}-certificate-tls{{ end }}
         {{- end }}
         {{ tpl .Values.master.extraVolumes . | indent 8 | trim }}
       {{- end }}

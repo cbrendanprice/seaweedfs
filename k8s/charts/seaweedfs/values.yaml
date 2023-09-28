@@ -9,9 +9,6 @@ global:
   imagePullSecrets: ""
   restartPolicy: Always
   loggingLevel: 1
-  enableSecurity: false
-  certificates:
-    alphacrds: false
   monitoring:
     enabled: false
     gatewayHost: null
@@ -27,6 +24,30 @@ global:
     WEED_CLUSTER_DEFAULT: "sw"
     WEED_CLUSTER_SW_MASTER: "seaweedfs-master.seaweedfs:9333"
     WEED_CLUSTER_SW_FILER: "seaweedfs-filer-client.seaweedfs:8888"
+
+  ## TLS configuration
+  ## note that tls will be configured under the following assumptions:
+  ##  - cert-manager, istio, and vault have all been installed.
+  ##  - vault has been configured to serve as the certificate authority for
+  ##    cert-manager.
+  ##  - vault has authorized an `internal-ca` kubernetes role that can create
+  ##    short-lived certificates.
+  ##  - any kubernetes service account can access/assume the `internal-ca`
+  ##    kubernete role.
+  ##  - istio has been configured/authorized to read/validate certificates created
+  ##    by the role.
+  tls:
+    ## @param tls.enabled Enable TLS traffic
+    ##
+    enabled: false
+    ## @param tls.enabled Name of an existing tls ecertificate secret that will be used
+    #         instead of creating a certificate.
+    ##
+    existingSecret: ""
+    ## @param tls.enabled Enables istio's `STRICT` mtls mode for peer authentication
+    ##        to seaweed services.
+    ##
+    mutualTLSRequired: false
 
 image:
   registry: ""
@@ -132,27 +153,23 @@ master:
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccountName: ""
 
+  # Enable ingress for the master seaweedfs component
+  ## note that ingress is configured under the following assumptions:
+  ##  - all cluster ingress is managed by an istio ingress gateway
   ingress:
+    ## @param main.ingress.annotations
+    ##
+    annotations: {}
+    ## @param server.ingress.enabled
+    ##
     enabled: false
-    className: "nginx"
-    # host: false for "*" hostname
-    host: "master.seaweedfs.local"
-    annotations: |
-      nginx.ingress.kubernetes.io/auth-type: "basic"
-      nginx.ingress.kubernetes.io/auth-secret: "default/ingress-basic-auth-secret"
-      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required - SW-Master'
-      nginx.ingress.kubernetes.io/service-upstream: "true"
-      nginx.ingress.kubernetes.io/rewrite-target: /$1
-      nginx.ingress.kubernetes.io/use-regex: "true"
-      nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
-      nginx.ingress.kubernetes.io/ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/configuration-snippet: |
-        sub_filter '<head>' '<head> <base href="/sw-master/">'; #add base url
-        sub_filter '="/' '="./';                                #make absolute paths to relative
-        sub_filter '=/' '=./';
-        sub_filter '/seaweedfsstatic' './seaweedfsstatic';
-        sub_filter_once off;
+    ## @param server.ingress.extraHosts An array with additional hostname(s) to be covered
+    ##        by the istio virtual service
+    ##
+    extraHosts: []
+    ## @param server.ingress.hostname Default host for the istio virtual service
+    ##
+    hostname: "seaweedfs-master.cluster.local"
 
   extraEnvironmentVars:
     WEED_MASTER_VOLUME_GROWTH_COPY_1: 7
@@ -185,6 +202,11 @@ master:
     successThreshold: 2
     failureThreshold: 100
     timeoutSeconds: 10
+
+  ## @param master.podAnnotations Annotations for master pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
 
 volume:
   enabled: true
@@ -329,6 +351,11 @@ volume:
     failureThreshold: 100
     timeoutSeconds: 30
 
+  ## @param master.podAnnotations Annotations for volume pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
+
 filer:
   enabled: true
   repository: null
@@ -440,28 +467,23 @@ filer:
   # ref: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
   serviceAccountName: ""
 
+  # Enable ingress for the filer seaweedfs component
+  ## note that ingress is configured under the following assumptions:
+  ##  - all cluster ingress is managed by an istio ingress gateway
   ingress:
+    ## @param main.ingress.annotations
+    ##
+    annotations: {}
+    ## @param server.ingress.enabled
+    ##
     enabled: false
-    className: "nginx"
-    # host: false for "*" hostname
-    host: "seaweedfs.cluster.local"
-    annotations: |
-      nginx.ingress.kubernetes.io/backend-protocol: GRPC
-      nginx.ingress.kubernetes.io/auth-type: "basic"
-      nginx.ingress.kubernetes.io/auth-secret: "default/ingress-basic-auth-secret"
-      nginx.ingress.kubernetes.io/auth-realm: 'Authentication Required - SW-Filer'
-      nginx.ingress.kubernetes.io/service-upstream: "true"
-      nginx.ingress.kubernetes.io/rewrite-target: /$1
-      nginx.ingress.kubernetes.io/use-regex: "true"
-      nginx.ingress.kubernetes.io/enable-rewrite-log: "true"
-      nginx.ingress.kubernetes.io/ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
-      nginx.ingress.kubernetes.io/configuration-snippet: |
-        sub_filter '<head>' '<head> <base href="/sw-filer/">'; #add base url
-        sub_filter '="/' '="./';                               #make absolute paths to relative
-        sub_filter '=/' '=./';
-        sub_filter '/seaweedfsstatic' './seaweedfsstatic';
-        sub_filter_once off;
+    ## @param server.ingress.extraHosts An array with additional hostname(s) to be covered
+    ##        by the istio virtual service
+    ##
+    extraHosts: []
+    ## @param server.ingress.hostname Default host for the istio virtual service
+    ##
+    hostname: "seaweedfs-filer.cluster.local"
 
   # extraEnvVars is a list of extra enviroment variables to set with the stateful set.
   extraEnvironmentVars:
@@ -533,6 +555,11 @@ filer:
     enableAuth: false
     skipAuthSecretCreation: false
     auditLogConfig: {}
+
+  ## @param master.podAnnotations Annotations for filer pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
 
 s3:
   enabled: false
@@ -621,10 +648,10 @@ s3:
     failureThreshold: 100
     timeoutSeconds: 10
 
+  ## @param master.podAnnotations Annotations for s3 pods
+  ## ref: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+  ##
+  podAnnotations: {}
+
 certificates:
-  commonName: "SeaweedFS CA"
   ipAddresses: []
-  keyAlgorithm: rsa
-  keySize: 2048
-  duration: 2160h  # 90d
-  renewBefore: 360h  # 15d

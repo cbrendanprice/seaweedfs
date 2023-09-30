@@ -1,8 +1,8 @@
 {{- if .Values.filer.enabled }}
 {{- $filerConfig := .Values.filer.configuration }}
 {{- $filerStoreConfigured := and .Values.filer.configuration.store.sectionNameForConfigurationFileStoreSection .Values.filer.configuration.store.tomlContentsForConfigurationFileStoreSection }}
-{{- $filterStoreAuthProvided := and $filerStoreConfigured .Values.filer.auth.store.username .Values.filer.auth.store.password }}
-{{- $initContainersRequired := or .Values.filer.initContainers $filterStoreAuthProvided }}
+{{- $filterStoreAuthProvided := and $filerStoreConfigured (or .Values.filer.auth.existingSecret (or .Values.filer.auth.store.credentials.username .Values.filer.auth.store.credentials.password)) }}
+{{- $initContainersRequired := or .Values.filer.initContainers $filterStoreAuthProvided .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
 {{- $s3GatewayEnabled := and .Values.filer.s3Gateway.enabled (not .Values.s3.enabled) }}
 {{- $s3GatewayConfig := .Values.global.s3Gateway }}
 apiVersion: apps/v1
@@ -78,8 +78,8 @@ spec:
           - |-
             mkdir -p /usr/local/etc/seaweedfs;
             cp /etc/sw/config/filer.toml /usr/local/etc/seaweedfs/filer.toml;
-            cat /etc/sw/store/auth/.password | xargs printf "\npassword = \"%s\"\n" >> /usr/local/etc/seaweedfs/filer.toml;
-            cat /etc/sw/store/auth/.username | xargs printf "username = \"%s\"\n" >> /usr/local/etc/seaweedfs/filer.toml;
+            cat /etc/sw/store/auth/password | xargs printf "\npassword = \"%s\"\n" >> /usr/local/etc/seaweedfs/filer.toml;
+            cat /etc/sw/store/auth/username | xargs printf "username = \"%s\"\n" >> /usr/local/etc/seaweedfs/filer.toml;
           volumeMounts:
           - name: filer-config
             mountPath: /usr/local/etc/seaweedfs
@@ -88,6 +88,29 @@ spec:
             subPath: filer.toml
           - name: filer-store-auth
             mountPath: /etc/sw/store/auth
+        {{- end }}
+        {{- if .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
+        - name: update-s3-gateway-identities
+          image: cbrendanprice/bash-jq-sponge:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command:
+          - bash
+          - -c
+          - |-
+            mkdir -p /etc/sw/s3/config;
+            cp /etc/sw/s3/config.json etc/sw/s3/config/config.json;
+            cat /etc/sw/s3/config/config.json | jq --slurpfile identities /etc/sw/s3/identities.json '.identities += $identities[]' | sponge /etc/sw/s3/config/config.json;
+          volumeMounts:
+          - name: s3-gateway-auth
+            mountPath: /etc/sw/s3/config
+          - name: s3-gateway-builtin-identities
+            mountPath: /etc/sw/s3/config.json
+            subPath: config.json
+          - name: s3-gateway-extra-identities
+            mountPath: /etc/sw/s3/identities.json
+            subPath: identities.json
         {{- end }}
         {{- if .Values.filer.initContainers }}
         {{ tpl .Values.filer.initContainers . | nindent 8 | trim }}
@@ -266,7 +289,11 @@ spec:
         - name: filer-store-auth
           secret:
             defaultMode: 420
+            {{- if .Values.filer.auth.store.existingSecret }}
+            secretName: {{ .Values.filer.auth.store.existingSecret | trim }}
+            {{ else }}
             secretName: {{ template "seaweedfs.name" . }}-filer-store-auth
+            {{ end }}
         {{- end }}
         {{- if $s3GatewayEnabled }}
         {{- if .Values.global.s3Gateway.auditLog.jsonContents }}
@@ -275,10 +302,23 @@ spec:
             name: {{ template "seaweedfs.name" . }}-s3-gateway-audit-log
         {{- end }}
         {{- if .Values.global.s3Gateway.auth.enabled }}
+        {{- if .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
+        - name: s3-gateway-auth
+          emptyDir: {}
+        - name: s3-gateway-builtin-identities
+          secret:
+            defaultMode: 420
+            secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth
+        - name: s3-gateway-extra-identities
+          secret:
+            defaultMode: 420
+            secretName: {{ .Values.global.s3Gateway.auth.extraIdentitiesSecret | trim }}
+        {{- else }}
         - name: s3-gateway-auth
           secret:
             defaultMode: 420
             secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth
+        {{- end }}
         {{- end }}
         {{- end }}
         {{- if not $filerStoreConfigured }}

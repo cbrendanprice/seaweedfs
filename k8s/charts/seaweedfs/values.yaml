@@ -101,93 +101,118 @@ global:
       ##   gateway will automatically be granted full permissions.
       ##
       enabled: true
-      ## @param global.s3Gateway.auth.administrator Auth configuration
-      ##  for the `administrator` s3 gateway identity.
+      
+      ## @param global.s3Gateway.auth.extraIdentitiesSecret
+      ##  specifies the name of a secret containing additional s3 gateway
+      ##   identities.
       ##
-      administrator:
-        ## @param global.s3Gateway.auth.administrator.enabled Enables
-        ##  the `administrator` s3 gateway identity.
-        ##
-        enabled: true
-        ## @param global.s3Gateway.auth.administrator.credentials
-        ##  A list of s3 gateway access credentials that will grant
-        ##   the `administrator` identity privileges.
-        ##
-        ## Note: these do *NOT* need to be access keys granted by AWS;
-        ##       they are only used by the seaweedfs s3 gateway alone.
-        ##
-        ## e.g.
-        ## credentials:
-        ##  - accessKey: "1234567890ABCDEFG"
-        ##    secretKey: "1234567890ABCDEFG"
-        ##
-        credentials: []
-      ## @param global.s3Gateway.auth.anonymous Auth configuration
-      ##  for the `anonymous` s3 gateway identity.
+      ## Note: the secret is expected to contain a stringData key of
+      ##       `identities.json` that is mapped to a json formatted
+      ##       array of valid s3 gateway identity objects.
       ##
-      ## Note: the `anonymous` identity can:
-      ##       - read bucket files**
+      ## e.g.
       ##
-      ## ** this effectively means that they must have a direct link
-      ##    to the bucket file in order to access.
+      ## ---
+      ## apiVersion: v1
+      ## kind: Secret
+      ## ...
+      ## stringData:
+      ##   identities.json: '[{"name":"my-identity","actions":["Read"],"credentials":[{"accessKey":"my-access-key","secretKey":"my-secret-key"}]}]'
       ##
-      anonymous:
-        ## @param global.s3Gateway.auth.administrator.enabled
-        ##  Enables the `anonymous` s3 gateway identity.
-        ##
-        enabled: false
-      ## @param global.s3Gateway.auth.guest Auth configuration for
-      ##   the `guest` s3 gateway identity.
+      extraIdentitiesSecret: ""
+
+      ## @param global.s3Gateway.auth.identities
+      ##  provides auth configuration options for this charts
+      ##   "built-in" identities.
       ##
-      ## Note: the `guest` identity can:
-      ##       - list all bucket folders and files
-      ##       - read all bucket files
-      ##
-      guest:
-        ## @param global.s3Gateway.auth.administrator.enabled
-        ##  Enables the `guest` s3 gateway identity.
+      identities:
+        ## @param global.s3Gateway.auth.identities.administrator Auth configuration
+        ##  for the `administrator` s3 gateway identity.
         ##
-        enabled: true
-        ## @param global.s3Gateway.auth.administrator.credentials
-        ##  A list of s3 gateway access credentials that will grant
-        ##   the `guest` identity privileges.
+        administrator:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled Enables
+          ##  the `administrator` s3 gateway identity.
+          ##
+          enabled: true
+          ## @param global.s3Gateway.auth.identities.administrator.credentials
+          ##  A list of s3 gateway access credentials that will grant
+          ##   the `administrator` identity privileges.
+          ##
+          ## Note: these do *NOT* need to be access keys granted by AWS;
+          ##       they are only used by the seaweedfs s3 gateway alone.
+          ##
+          ## e.g.
+          ## credentials:
+          ##  - accessKey: "1234567890ABCDEFG"
+          ##    secretKey: "1234567890ABCDEFG"
+          ##
+          credentials: []
+        ## @param global.s3Gateway.auth.identities.anonymous Auth configuration
+        ##  for the `anonymous` s3 gateway identity.
         ##
-        ## Note: these do *NOT* need to be access keys granted by AWS;
-        ##       they are only used by the seaweedfs s3 gateway alone.
+        ## Note: the `anonymous` identity can:
+        ##       - read bucket files**
         ##
-        ## e.g.
-        ## credentials:
-        ##  - accessKey: "1234567890ABCDEFG"
-        ##    secretKey: "1234567890ABCDEFG"
+        ## ** this effectively means that they must have a direct link
+        ##    to the bucket file in order to access.
         ##
-        credentials: []
-      ## @param global.s3Gateway.auth.member Auth configuration for
-      ##  the `member` s3 gateway identity.
-      ##
-      ## Note: the `member` identity can:
-      ##       - list all bucket folders and files
-      ##       - read all bucket files
-      ##       - create new bucket files
-      ##       - tag bucket files
-      ##
-      member:
-        ## @param global.s3Gateway.auth.administrator.enabled
-        ##  Enables the `member` s3 gateway identity.
+        anonymous:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled
+          ##  Enables the `anonymous` s3 gateway identity.
+          ##
+          enabled: false
+        ## @param global.s3Gateway.auth.identities.guest Auth configuration for
+        ##   the `guest` s3 gateway identity.
         ##
-        enabled: true
-        ## @param global.s3Gateway.auth.administrator.credentials
-        ##  A list of s3 gateway access credentials that will grant
-        ##   the `member` identity privileges.
+        ## Note: the `guest` identity can:
+        ##       - list all bucket folders and files
+        ##       - read all bucket files
         ##
-        ## Note: these do *NOT* need to be access keys granted by AWS;
-        ##       they are only used by the seaweedfs s3 gateway alone.
+        guest:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled
+          ##  Enables the `guest` s3 gateway identity.
+          ##
+          enabled: true
+          ## @param global.s3Gateway.auth.identities.administrator.credentials
+          ##  A list of s3 gateway access credentials that will grant
+          ##   the `guest` identity privileges.
+          ##
+          ## Note: these do *NOT* need to be access keys granted by AWS;
+          ##       they are only used by the seaweedfs s3 gateway alone.
+          ##
+          ## e.g.
+          ## credentials:
+          ##  - accessKey: "1234567890ABCDEFG"
+          ##    secretKey: "1234567890ABCDEFG"
+          ##
+          credentials: []
+        ## @param global.s3Gateway.auth.identities.member Auth configuration for
+        ##  the `member` s3 gateway identity.
         ##
-        ## e.g.
-        ## credentials:
-        ##  - accessKey: "1234567890ABCDEFG"
-        ##    secretKey: "1234567890ABCDEFG"
+        ## Note: the `member` identity can:
+        ##       - list all bucket folders and files
+        ##       - read all bucket files
+        ##       - create new bucket files
+        ##       - tag bucket files
         ##
-        credentials: []
+        member:
+          ## @param global.s3Gateway.auth.identities.administrator.enabled
+          ##  Enables the `member` s3 gateway identity.
+          ##
+          enabled: true
+          ## @param global.s3Gateway.auth.identities.administrator.credentials
+          ##  A list of s3 gateway access credentials that will grant
+          ##   the `member` identity privileges.
+          ##
+          ## Note: these do *NOT* need to be access keys granted by AWS;
+          ##       they are only used by the seaweedfs s3 gateway alone.
+          ##
+          ## e.g.
+          ## credentials:
+          ##  - accessKey: "1234567890ABCDEFG"
+          ##    secretKey: "1234567890ABCDEFG"
+          ##
+          credentials: []
 
     ## @param global.s3Gateway.ports
     ##
@@ -961,13 +986,29 @@ filer:
   ## @param filer.auth [object] Defines auth related options for the filer server.
   ##
   auth:
-    ## @param filer.auth.store [object] Defines auth credentials (as a secret) for the
-    ##  optionally configured store. See the filer.configuration.store object below.
-    ## Note: Ignored if the filer's store is not confiugred.
+    ## @param filer.auth.store
+    ##
+    ## Note: store auth is ignored if the filer's store is not configured.
+    ##       see @param filer.configuration.store
     ##
     store:
-      username:
-      password:
+      ## @param filer.auth.store.credentials
+      ##  if defined, a secret will be created containing the credentials for
+      ##   the store and injected into the filer.toml configuration file for
+      ##   the store's configuration section.
+      ##
+      ## Note: credentials will be ignored if an existing secret is provided.
+      ##       see @param filer.auth.store.existingCredentialsSecret below
+      ##
+      credentials:
+        username: ""
+        password: ""
+
+      ## @param filer.auth.store.existingSecret
+      ##  specifies the name of an existing secret that will be used to source
+      ##   the `username` and `password` for the filer's store.
+      ##
+      existingSecret: ""
 
   ## @param filer.configuration Configuration for the filer server component.
   ##

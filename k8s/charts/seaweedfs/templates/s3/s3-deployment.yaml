@@ -1,6 +1,5 @@
 {{- if .Values.s3.enabled }}
 {{- $s3Config := .Values.s3.configuration }}
-{{- $s3GatewayEnabled := and .Values.filer.s3Gateway.enabled (not .Values.s3.enabled) }}
 {{- $s3GatewayConfig := .Values.global.s3Gateway }}
 apiVersion: apps/v1
 kind: Deployment
@@ -45,8 +44,32 @@ spec:
       {{- if .Values.s3.serviceAccountName }}
       serviceAccountName: {{ .Values.s3.serviceAccountName | quote }}
       {{- end }}
-      {{- if .Values.s3.initContainers }}
+      {{- if or .Values.s3.initContainers (and .Values.global.s3Gateway.auth.enabled .Values.global.s3Gateway.auth.extraIdentitiesSecret) }}
       initContainers:
+        {{- if and .Values.global.s3Gateway.auth.enabled .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
+        - name: update-s3-gateway-identities
+          image: bash:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command:
+          - bash
+          - -c
+          - |-
+            apk add jq moreutils;
+            mkdir -p /etc/sw/s3/config;
+            cp /etc/sw/s3/config.json etc/sw/s3/config/config.json;
+            cat /etc/sw/s3/config/config.json | jq --slurpfile identities /etc/sw/s3/identities.json '.identities += $identities[]' | sponge /etc/sw/s3/config/config.json;
+          volumeMounts:
+          - name: s3-gateway-auth
+            mountPath: /etc/sw/s3/config
+          - name: s3-gateway-builtin-identities
+            mountPath: /etc/sw/s3/config.json
+            subPath: config.json
+          - name: s3-gateway-extra-identities
+            mountPath: /etc/sw/s3/identities.json
+            subPath: identities.json
+        {{- end }}
         {{ tpl .Values.s3.initContainers . | nindent 8 | trim }}
       {{- end }}
       containers:
@@ -106,7 +129,6 @@ spec:
               {{- end }}
               -filer={{ template "seaweedfs.name" . }}-filer-client.{{ .Release.Namespace }}:{{ .Values.filer.configuration.ports.http }}
           volumeMounts:
-            {{- if $s3GatewayEnabled }}
             {{- if .Values.global.s3Gateway.auditLog.jsonContents }}
             - name: s3-gateway-audit-log-config
               mountPath: /etc/sw/s3/auditLog/config.json
@@ -116,7 +138,6 @@ spec:
             - name: s3-gateway-auth
               mountPath: /etc/sw/s3/config/config.json
               subPath: config.json
-            {{- end }}
             {{- end }}
             {{- if .Values.global.tls.enabled }}
             - name: security-config
@@ -164,13 +185,24 @@ spec:
             {{ tpl .Values.s3.resources . | nindent 12 | trim }}
           {{- end }}
       volumes:
-        {{- if $s3GatewayEnabled }}
         {{- if .Values.global.s3Gateway.auditLog.jsonContents }}
         - name: s3-gateway-audit-log-config
           configMap:
             name: {{ template "seaweedfs.name" . }}-s3-gateway-audit-log
         {{- end }}
         {{- if .Values.global.s3Gateway.auth.enabled }}
+        {{- if .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
+        - name: s3-gateway-auth
+          emptyDir: {}
+        - name: s3-gateway-builtin-identities
+          secret:
+            defaultMode: 420
+            secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth
+        - name: s3-gateway-extra-identities
+          secret:
+            defaultMode: 420
+            secretName: {{ .Values.global.s3Gateway.auth.extraIdentitiesSecret | trim }}
+        {{- else }}
         - name: s3-gateway-auth
           secret:
             defaultMode: 420

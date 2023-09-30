@@ -48,7 +48,7 @@ spec:
       initContainers:
         {{- if and .Values.global.s3Gateway.auth.enabled .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
         - name: update-s3-gateway-identities
-          image: bash:latest
+          image: cbrendanprice/bash-jq-sponge:latest
           imagePullPolicy: IfNotPresent
           securityContext:
             runAsUser: 0
@@ -56,7 +56,6 @@ spec:
           - bash
           - -c
           - |-
-            apk add jq moreutils;
             mkdir -p /etc/sw/s3/config;
             cp /etc/sw/s3/config.json etc/sw/s3/config/config.json;
             cat /etc/sw/s3/config/config.json | jq --slurpfile identities /etc/sw/s3/identities.json '.identities += $identities[]' | sponge /etc/sw/s3/config/config.json;

@@ -1,0 +1,275 @@
+{{- if .Values.volume.enabled }}
+{{- $volumeConfig := .Values.volume.configuration }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "seaweedfs.name" . }}-volume
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+spec:
+  serviceName: {{ template "seaweedfs.name" . }}-volume
+  replicas: {{ .Values.volume.replicas }}
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+      helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: volume
+  template:
+    metadata:
+      {{- if .Values.volume.podAnnotations }}
+      annotations:
+        {{ toYaml .Values.volume.podAnnotations | nindent 8 | trim }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: volume
+    spec:
+      {{- if .Values.volume.affinity }}
+      affinity:
+        {{ tpl .Values.volume.affinity . | nindent 8 | trim }}
+      {{- end }}
+      restartPolicy: {{ default .Values.global.restartPolicy .Values.volume.restartPolicy }}
+      {{- if .Values.volume.tolerations }}
+      tolerations:
+        {{ tpl .Values.volume.tolerations . | nindent 8 | trim }}
+      {{- end }}
+      {{- include "seaweedfs.imagePullSecrets" . | nindent 6 }}
+      terminationGracePeriodSeconds: 150
+      {{- if .Values.volume.priorityClassName }}
+      priorityClassName: {{ .Values.volume.priorityClassName | quote }}
+      {{- end }}
+      enableServiceLinks: false
+      {{- if .Values.volume.serviceAccountName }}
+      serviceAccountName: {{ .Values.volume.serviceAccountName | quote }}
+      {{- end }}
+      {{- if .Values.volume.initContainers }}
+      initContainers:
+        {{ tpl .Values.volume.initContainers . | nindent 8 | trim }}
+      {{- end }}
+      containers:
+        - name: seaweedfs
+          image: {{ template "volume.image" . }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.global.imagePullPolicy }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: SEAWEEDFS_FULLNAME
+              value: "{{ template "seaweedfs.name" . }}"
+            {{- if .Values.global.extraEnvironmentVars }}
+            {{- range $key, $value := .Values.global.extraEnvironmentVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+          command:
+            - "/bin/sh"
+            - "-ec"
+            - |
+              exec /usr/bin/weed \
+                -logdir={{- if .Values.volume.persistence.logs.enabled }}{{ .Values.volume.persistence.logs.mountPath }}{{- else }}/logs{{- end }} \
+                -v={{ .Values.global.loggingLevel }} \
+                volume \
+                -compactionMBps={{ $volumeConfig.limits.backgroundCompactionRate }} \
+                -dataCenter={{ $volumeConfig.topology.dataCenterName }} \
+                -dir={{- if .Values.volume.persistence.data.enabled }}{{ .Values.volume.persistence.data.mountPath }}{{- else }}/data{{- end }} \
+                -dir.idx={{- if .Values.volume.persistence.indices.enabled }}{{ .Values.volume.persistence.indices.mountPath }}{{- else }}/indices{{- end }} \
+                -fileSizeLimitMB={{ $volumeConfig.limits.filseSize }} \
+                -index={{ $volumeConfig.indexingImplementation }} \
+                -ip=${POD_NAME}.${SEAWEEDFS_FULLNAME}-volume.{{ .Release.Namespace }} \
+                -ip.bind={{ .Values.volume.ipBind }} \
+                -max={{ $volumeConfig.limits.volumeCount }} \
+                -minFreeSpacePercent={{ subf 100.0 $volumeConfig.limits.diskSpaceUtilization }} \
+                -port={{ $volumeConfig.ports.http }} \
+                -rack={{ $volumeConfig.topology.rackName }} \
+                -readMode={{ $volumeConfig.nonLocalVolumeReadRequestPolicy }} \
+                {{- if and .Values.global.monitoring.enabled $volumeConfig.ports.metrics }}
+                -metricsPort={{ $volumeConfig.ports.metrics }} \
+                {{- end }}
+                {{- if $volumeConfig.writePermissionsIPWhitelist }}
+                -whiteList={{ join "," $volumeConfig.writePermissionsIPWhitelist }} \
+                {{- end }}
+                {{- if $volumeConfig.autoAdjustImageOrientation }}
+                -images.fix.orientation \
+                {{- end }}
+                -mserver={{ range $index := until (.Values.master.replicas | int) }}${SEAWEEDFS_FULLNAME}-master-{{ $index }}.${SEAWEEDFS_FULLNAME}-master.{{ $.Release.Namespace }}:{{ ternary $.Values.master.configuration.ports.http 9333 (not (empty $.Values.master.configuration.ports.http)) }}{{ if lt $index (sub ($.Values.master.replicas | int) 1) }},{{ end }}{{ end }}
+          volumeMounts:
+            - name: volume-data
+              mountPath: {{ if .Values.volume.persistence.data.enabled }}{{ .Values.volume.persistence.data.mountPath }}{{ else }}/data{{ end }}
+            - name: volume-indices
+              mountPath: {{ if .Values.volume.persistence.indices.enabled }}{{ .Values.volume.persistence.indices.mountPath }}{{ else }}/indices{{ end }}
+            - name: volume-logs
+              mountPath: {{ if .Values.volume.persistence.logs.enabled }}{{ .Values.volume.persistence.logs.mountPath }}{{ else }}/logs{{ end }}
+            {{- if .Values.global.tls.enabled }}
+            - name: security-config
+              readOnly: true
+              mountPath: /etc/seaweedfs/security.toml
+              subPath: security.toml
+            - name: tls-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificate/
+            {{- end }}
+            {{ tpl .Values.volume.extraVolumeMounts . | nindent 12 | trim }}
+          ports:
+            - containerPort: {{ $volumeConfig.ports.grpc }}
+            - containerPort: {{ $volumeConfig.ports.http }}
+              name: swfs-vol
+            {{- if and .Values.global.monitoring.enabled $volumeConfig.ports.metrics }}
+            - containerPort: {{ $volumeConfig.ports.metrics }}
+              name: metrics
+            {{- end }}
+          {{- if .Values.volume.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.volume.readinessProbe.httpGet.path }}
+              port: {{ $volumeConfig.ports.http }}
+              scheme: {{ .Values.volume.readinessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.volume.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.volume.readinessProbe.periodSeconds }}
+            successThreshold: {{ .Values.volume.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.volume.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.volume.readinessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.volume.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.volume.livenessProbe.httpGet.path }}
+              port: {{ $volumeConfig.ports.http }}
+              scheme: {{ .Values.volume.livenessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.volume.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.volume.livenessProbe.periodSeconds }}
+            successThreshold: {{ .Values.volume.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.volume.livenessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.volume.livenessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.volume.resources }}
+          resources:
+            {{ tpl .Values.volume.resources . | nindent 12 | trim }}
+          {{- end }}
+      volumes:
+        {{- if not .Values.volume.persistence.data.enabled }}
+        - name: volume-data
+          emptyDir: {}
+        {{- else if .Values.volume.persistence.data.existingClaim }}
+        - name: volume-data
+          persistentVolumeClaim:
+            claimName: {{ printf "%s" (tpl .Values.volume.persistence.data.existingClaim .) }}
+        {{- end }}
+        {{- if not .Values.volume.persistence.indices.enabled }}
+        - name: volume-indices
+          emptyDir: {}
+        {{- else if .Values.volume.persistence.indices.existingClaim }}
+        - name: volume-indices
+          persistentVolumeClaim:
+            claimName: {{ printf "%s" (tpl .Values.volume.persistence.indices.existingClaim .) }}
+        {{- end }}
+        {{- if not .Values.volume.persistence.logs.enabled }}
+        - name: volume-logs
+          emptyDir: {}
+        {{- else if .Values.volume.persistence.logs.existingClaim }}
+        - name: volume-logs
+          persistentVolumeClaim:
+            claimName: {{ printf "%s" (tpl .Values.volume.persistence.logs.existingClaim .) }}
+        {{- end }}
+        {{- if .Values.global.tls.enabled }}
+        - name: security-config
+          configMap:
+            name: {{ template "seaweedfs.name" . }}-security-config
+        - name: tls-cert
+          secret:
+            secretName: {{ if .Values.global.tls.existingSecret }}{{ .Values.global.tls.existingSecret }}{{ else }}{{ template "seaweedfs.name" . }}-certificate-tls{{ end }}
+        {{- end }}
+      {{- if .Values.volume.extraVolumes }}
+        {{ tpl .Values.volume.extraVolumes . | indent 8 | trim }}
+      {{- end }}
+      {{- if .Values.volume.nodeSelector }}
+      nodeSelector:
+        {{ tpl .Values.volume.nodeSelector . | indent 8 | trim }}
+      {{- end }}
+  {{- if or (and .Values.volume.persistence.data.enabled (not .Values.volume.persistence.data.existingClaim)) (and .Values.volume.persistence.indices.enabled (not .Values.volume.persistence.indices.existingClaim)) (and .Values.volume.persistence.logs.enabled (not .Values.volume.persistence.logs.existingClaim)) }}
+  volumeClaimTemplates:
+    {{- if and .Values.volume.persistence.data.enabled (not .Values.volume.persistence.data.existingClaim) }}
+    - metadata:
+        name: volume-data
+        {{- if .Values.volume.persistence.data.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.data.annotations "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.volume.persistence.data.labels }}
+        labels: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.data.labels "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.volume.persistence.data.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.volume.persistence.data.size | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.volume.persistence.data "global" .Values.global) | nindent 8 }}
+        {{- if .Values.volume.persistence.data.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.data.selector "context" $) | nindent 10 }}
+        {{- end -}}
+    {{- end }}
+    {{- if and .Values.volume.persistence.indices.enabled (not .Values.volume.persistence.indices.existingClaim) }}
+    - metadata:
+        name: volume-indices
+        {{- if .Values.volume.persistence.indices.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.indices.annotations "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.volume.persistence.indices.labels }}
+        labels: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.indices.labels "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.volume.persistence.indices.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.volume.persistence.indices.size | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.volume.persistence.indices "global" .Values.global) | nindent 8 }}
+        {{- if .Values.volume.persistence.indices.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.indices.selector "context" $) | nindent 10 }}
+        {{- end -}}
+    {{- end }}
+    {{- if and .Values.volume.persistence.logs.enabled (not .Values.volume.persistence.logs.existingClaim) }}
+    - metadata:
+        name: volume-logs
+        {{- if .Values.volume.persistence.logs.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.logs.annotations "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.volume.persistence.logs.labels }}
+        labels: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.logs.labels "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.volume.persistence.logs.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.volume.persistence.logs.size | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.volume.persistence.logs "global" .Values.global) | nindent 8 }}
+        {{- if .Values.volume.persistence.logs.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.volume.persistence.logs.selector "context" $) | nindent 10 }}
+        {{- end -}}
+    {{- end }}
+  {{- end }}
+{{- end }}

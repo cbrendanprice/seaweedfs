@@ -1,0 +1,16 @@
+{{- if and (or .Values.filer.s3Gateway.enabled .Values.s3.enabled) .Values.global.s3Gateway.auditLog.jsonContents }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: s3-gateway
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: {{ template "seaweedfs.name" . }}-s3-gateway-audit-log
+  namespace: {{ .Release.Namespace }}
+data:
+  config.json: |-0
+    {{ toJson (.Values.global.s3Gateway.auditLog.jsonContents | trim) | nindent 4 }}
+{{- end }}

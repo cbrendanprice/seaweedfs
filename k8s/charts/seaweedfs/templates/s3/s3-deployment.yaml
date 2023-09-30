@@ -1,4 +1,7 @@
 {{- if .Values.s3.enabled }}
+{{- $s3Config := .Values.s3.configuration }}
+{{- $s3GatewayEnabled := and .Values.filer.s3Gateway.enabled (not .Values.s3.enabled) }}
+{{- $s3GatewayConfig := .Values.global.s3Gateway }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,8 +23,7 @@ spec:
   template:
     metadata:
       {{- if .Values.s3.podAnnotations }}
-      annotations:
-        {{ toYaml .Values.s3.podAnnotations | nindent 8 | trim }}
+      annotations: {{- include "common.tplvalues.render" (dict "value" .Values.s3.podAnnotations "context" $) | nindent 8 }}
       {{- end }}
       labels:
         app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
@@ -77,50 +79,45 @@ spec:
             - "-ec"
             - | 
               exec /usr/bin/weed \
-               {{- if eq .Values.s3.logs.type "hostPath" }}
-              -logdir=/logs \
-              {{- else }}
               -logtostderr=true \
-              {{- end }}
-              {{- if .Values.s3.loggingOverrideLevel }}
-              -v={{ .Values.s3.loggingOverrideLevel }} \
-              {{- else }}
               -v={{ .Values.global.loggingLevel }} \
-              {{- end }}
               s3 \
               -ip.bind={{ .Values.s3.bindAddress }} \
-              -port={{ .Values.s3.port }} \
-              {{- if .Values.s3.metricsPort }}
-              -metricsPort {{ .Values.s3.metricsPort }} \
+              -port={{ $s3GatewayConfig.ports.http }} \
+              {{- if and .Values.global.monitoring.enabled $s3Config.ports.metrics }}
+              -metricsPort {{ $s3Config.ports.metrics }} \
               {{- end }}
-              {{- if .Values.global.tls.enabled }}
-              {{- if .Values.s3.httpsPort }}
-              -port.https={{ .Values.s3.httpsPort }} \
-              {{- end }}
+              {{- if and .Values.global.tls.enabled $s3GatewayConfig.ports.https }}
+              -port.https={{ $s3GatewayConfig.httpsPort | int }} \
               -cert.file=/usr/local/share/ca-certificates/client/tls.crt \
               -key.file=/usr/local/share/ca-certificates/client/tls.key \
               {{- end }}
-              {{- if .Values.s3.domainName }}
-              -domainName={{ .Values.s3.domainName }} \
+              {{- if $s3GatewayConfig.domainName }}
+              -domainName={{ $s3GatewayConfig.domainName }} \
               {{- end }}
-              {{- if .Values.s3.allowEmptyFolder }}
-              -allowEmptyFolder={{ .Values.s3.allowEmptyFolder }} \
+              {{- if $s3GatewayConfig.allowEmptyFolder }}
+              -allowEmptyFolder={{ $s3GatewayConfig.allowEmptyFolder }} \
               {{- end }}
-              {{- if .Values.s3.enableAuth }}
-              -config=/etc/sw/seaweedfs_s3_config \
+              {{- if $s3GatewayConfig.auth.enabled }}
+              -config=/etc/sw/s3/config/config.json \
               {{- end }}
-              {{- if .Values.s3.auditLogConfig }}
-              -auditLogConfig=/etc/sw/s3_auditLogConfig.json \
+              {{- if $s3GatewayConfig.auditLog.jsonContents }}
+              -auditLogConfig=/etc/sw/s3/auditLog/config.json \
               {{- end }}
-              -filer={{ template "seaweedfs.name" . }}-filer-client.{{ .Release.Namespace }}:{{ .Values.filer.port }}
+              -filer={{ template "seaweedfs.name" . }}-filer-client.{{ .Release.Namespace }}:{{ .Values.filer.configuration.ports.http }}
           volumeMounts:
-            {{- if eq .Values.s3.logs.type "hostPath" }}
-            - name: logs
-              mountPath: "/logs/"
+            {{- if $s3GatewayEnabled }}
+            {{- if .Values.global.s3Gateway.auditLog.jsonContents }}
+            - name: s3-gateway-audit-log-config
+              mountPath: /etc/sw/s3/auditLog/config.json
+              subPath: config.json
             {{- end }}
-            - mountPath: /etc/sw
-              name: config-users
-              readOnly: true
+            {{- if .Values.global.s3Gateway.auth.enabled }}
+            - name: s3-gateway-auth
+              mountPath: /etc/sw/s3/config/config.json
+              subPath: config.json
+            {{- end }}
+            {{- end }}
             {{- if .Values.global.tls.enabled }}
             - name: security-config
               readOnly: true
@@ -132,17 +129,17 @@ spec:
             {{- end }}
             {{ tpl .Values.s3.extraVolumeMounts . | nindent 12 | trim }}
           ports:
-            - containerPort: {{ .Values.s3.port }}
+            - containerPort: {{ $s3GatewayConfig.ports.http }}
               name: swfs-s3
-            {{- if .Values.s3.metricsPort }}
-            - containerPort: {{ .Values.s3.metricsPort }}
-              name: "metrics"
+            {{- if and .Values.global.monitoring.enabled $s3Config.ports.metrics }}
+            - containerPort: {{ $s3Config.ports.metrics }}
+              name: metrics
             {{- end }}
           {{- if .Values.s3.readinessProbe.enabled }}
           readinessProbe:
             httpGet:
               path: {{ .Values.s3.readinessProbe.httpGet.path }}
-              port: {{ .Values.s3.port }}
+              port: {{ $s3GatewayConfig.ports.http }}
               scheme: {{ .Values.s3.readinessProbe.scheme }}
             initialDelaySeconds: {{ .Values.s3.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.s3.readinessProbe.periodSeconds }}
@@ -154,7 +151,7 @@ spec:
           livenessProbe:
             httpGet:
               path: {{ .Values.s3.livenessProbe.httpGet.path }}
-              port: {{ .Values.s3.port }}
+              port: {{ $s3GatewayConfig.ports.http }}
               scheme: {{ .Values.s3.livenessProbe.scheme }}
             initialDelaySeconds: {{ .Values.s3.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.s3.livenessProbe.periodSeconds }}
@@ -167,15 +164,18 @@ spec:
             {{ tpl .Values.s3.resources . | nindent 12 | trim }}
           {{- end }}
       volumes:
-        - name: config-users
+        {{- if $s3GatewayEnabled }}
+        {{- if .Values.global.s3Gateway.auditLog.jsonContents }}
+        - name: s3-gateway-audit-log-config
+          configMap:
+            name: {{ template "seaweedfs.name" . }}-s3-gateway-audit-log
+        {{- end }}
+        {{- if .Values.global.s3Gateway.auth.enabled }}
+        - name: s3-gateway-auth
           secret:
             defaultMode: 420
-            secretName: seaweedfs-s3-secret
-        {{- if eq .Values.s3.logs.type "hostPath" }}
-        - name: logs
-          hostPath:
-            path: {{ .Values.s3.logs.hostPathPrefix }}/logs/seaweedfs/s3
-            type: DirectoryOrCreate
+            secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth
+        {{- end }}
         {{- end }}
         {{- if .Values.global.tls.enabled }}
         - name: security-config

@@ -1,11 +1,10 @@
-{{- if .Values.filer.ingress.enabled }}
+{{- if and .Values.filer.ingress.enabled .Values.filer.configuration.ports.http }}
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   {{- if .Values.filer.ingress.annotations }}
-  annotations:
-    {{ toYaml .Values.filer.ingress.annotations | nindent 4 | trim }}
+  annotations: {{- include "common.tplvalues.render" (dict "value" .Values.filer.ingress.annotations "context" $) | nindent 4 }}
   {{- end }}
   labels:
     app.kubernetes.io/component: filer
@@ -26,18 +25,17 @@ spec:
   http:
   - route:
     - destination:
-        host: '{{ template "seaweedfs.name" . }}-filer.{{ .Release.Service }}.svc.cluster.local'
+        host: '{{ template "seaweedfs.name" . }}-filer.{{ .Release.Namespace }}.svc.cluster.local'
         port:
-          number: {{ .Values.filer.port }}
+          number: {{ .Values.filer.configuration.ports.http }}
 {{- end }}
-{{- if .Values.master.ingress.enabled }}
+{{- if and .Values.master.ingress.enabled .Values.master.configuration.ports.http }}
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService
 metadata:
   {{- if .Values.master.ingress.annotations }}
-  annotations:
-    {{ toYaml .Values.master.ingress.annotations | nindent 4 | trim }}
+  annotations: {{- include "common.tplvalues.render" (dict "value" .Values.master.ingress.annotations "context" $) | nindent 4 }}
   {{- end }}
   labels:
     app.kubernetes.io/component: master
@@ -58,7 +56,7 @@ spec:
   http:
   - route:
     - destination:
-        host: '{{ template "seaweedfs.name" . }}-master.{{ .Release.Service }}.svc.cluster.local'
+        host: '{{ template "seaweedfs.name" . }}-master.{{ .Release.Namespace }}.svc.cluster.local'
         port:
-          number: {{ .Values.master.port }}
+          number: {{ .Values.master.configuration.ports.http }}
 {{- end }}

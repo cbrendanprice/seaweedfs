@@ -11,15 +11,13 @@ metadata:
     app.kubernetes.io/instance: {{ .Release.Name }}
 data:
   security.toml: |-
-    # this file is read by master, volume server, and filer
-
     # the jwt signing key is read by master and volume server
     # a jwt expires in 10 seconds
     [jwt.signing]
     key = "{{ randAlphaNum 10 | b64enc }}"
 
     [grpc]
-    ca = "/usr/local/share/ca-certificate/tls.crt"
+    ca = "/usr/local/share/ca-certificate/ca.crt"
 
     [grpc.volume]
     cert = "/usr/local/share/ca-certificate/tls.crt"
@@ -44,6 +42,7 @@ data:
     #     this does not work with other clients, e.g., "weed filer|mount" etc, yet.
     [https.client]
     enabled = false
+
     [https.volume]
     cert = ""
     key  = ""

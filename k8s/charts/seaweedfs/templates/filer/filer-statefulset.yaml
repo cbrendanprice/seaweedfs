@@ -1,0 +1,362 @@
+{{- if .Values.filer.enabled }}
+{{- $filerConfig := .Values.filer.configuration }}
+{{- $filerStoreConfigured := and .Values.filer.configuration.store.sectionNameForConfigurationFileStoreSection .Values.filer.configuration.store.tomlContentsForConfigurationFileStoreSection }}
+{{- $filterStoreAuthProvided := and $filerStoreConfigured .Values.filer.auth.store.username .Values.filer.auth.store.password }}
+{{- $initContainersRequired := or .Values.filer.initContainers $filterStoreAuthProvided }}
+{{- $s3GatewayEnabled := and .Values.filer.s3Gateway.enabled (not .Values.s3.enabled) }}
+{{- $s3GatewayConfig := .Values.global.s3Gateway }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ template "seaweedfs.name" . }}-filer
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: filer
+spec:
+  serviceName: {{ template "seaweedfs.name" . }}-filer
+  podManagementPolicy: Parallel
+  replicas: {{ .Values.filer.replicas }}
+  {{- if (gt (int .Values.filer.updatePartition) 0) }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: {{ .Values.filer.updatePartition }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+      helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: filer
+  template:
+    metadata:
+      {{- if .Values.filer.podAnnotations }}
+      annotations: {{- include "common.tplvalues.render" (dict "value" .Values.filer.podAnnotations "context" $) | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: filer
+    spec:
+      restartPolicy: {{ default .Values.global.restartPolicy .Values.filer.restartPolicy }}
+      {{- if .Values.filer.affinity }}
+      affinity:
+        {{ tpl .Values.filer.affinity . | nindent 8 | trim }}
+      {{- end }}
+      {{- if .Values.filer.tolerations }}
+      tolerations:
+        {{ tpl .Values.filer.tolerations . | nindent 8 | trim }}
+      {{- end }}
+      {{- include "seaweedfs.imagePullSecrets" . | nindent 6 }}
+      {{- if .Values.global.createClusterRole }}
+      serviceAccountName: seaweedfs-rw-sa #hack for delete pod master after migration
+      {{- end }}
+      terminationGracePeriodSeconds: 60
+      {{- if .Values.filer.priorityClassName }}
+      priorityClassName: {{ .Values.filer.priorityClassName | quote }}
+      {{- end }}
+      enableServiceLinks: false
+      {{- if .Values.filer.serviceAccountName }}
+      serviceAccountName: {{ .Values.filer.serviceAccountName | quote }}
+      {{- end }}
+      {{- if $initContainersRequired }}
+      initContainers:
+        {{- if $filterStoreAuthProvided }}
+        - name: update-filer-config-with-auth
+          image: bash:latest
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+          command:
+          - bash
+          - -c
+          - |-
+            mkdir -p /usr/local/etc/seaweedfs;
+            cp /etc/sw/config/filer.toml /usr/local/etc/seaweedfs/filer.toml;
+            cat /etc/sw/store/auth/.password | xargs printf "\npassword = \"%s\"\n" >> /usr/local/etc/seaweedfs/filer.toml;
+            cat /etc/sw/store/auth/.username | xargs printf "username = \"%s\"\n" >> /usr/local/etc/seaweedfs/filer.toml;
+          volumeMounts:
+          - name: filer-config
+            mountPath: /usr/local/etc/seaweedfs
+          - name: filer-configmap-config
+            mountPath: /etc/sw/config/filer.toml
+            subPath: filer.toml
+          - name: filer-store-auth
+            mountPath: /etc/sw/store/auth
+        {{- end }}
+        {{- if .Values.filer.initContainers }}
+        {{ tpl .Values.filer.initContainers . | nindent 8 | trim }}
+        {{- end }}
+      {{- end }}
+      containers:
+        - name: seaweedfs
+          image: {{ template "filer.image" . }}
+          imagePullPolicy: {{ default "IfNotPresent" .Values.global.imagePullPolicy }}
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SEAWEEDFS_FULLNAME
+              value: "{{ template "seaweedfs.name" . }}"
+            {{- if .Values.filer.extraEnvironmentVars }}
+            {{- range $key, $value := .Values.filer.extraEnvironmentVars }}
+            - name: {{ $key }}
+            {{- if kindIs "string" $value }}
+              value: {{ $value | quote }}
+            {{- else }}
+              valueFrom:
+                {{ toYaml $value | nindent 16 | trim }}
+            {{- end -}}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.global.extraEnvironmentVars }}
+            {{- range $key, $value := .Values.global.extraEnvironmentVars }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.filer.secretExtraEnvironmentVars }}
+            {{- range $key, $value := .Values.filer.secretExtraEnvironmentVars }}
+            - name: {{ $key }}
+              valueFrom: {{ toYaml $value | nindent 16 }}
+            {{- end }}
+            {{- end }}             
+          command:
+            - "/bin/sh"
+            - "-ec"
+            - | 
+              exec /usr/bin/weed \
+              -logdir={{- if .Values.filer.persistence.logs.enabled }}{{ .Values.filer.persistence.logs.mountPath }}{{- else }}/logs{{- end }} \
+              -v={{ .Values.global.loggingLevel }} \
+              filer \
+              -defaultReplicaPlacement={{- include "common.command.defaultReplicationValue" . }} \
+              -dirListLimit={{ $filerConfig.limits.directoryListingSize }} \
+              -filerGroup={{ $filerConfig.groupName }} \
+              -ip=${POD_IP} \
+              -maxMB={{ $filerConfig.limits.fileChunkSize }} \
+              {{- if $filerConfig.ports.http }}
+              -port={{ $filerConfig.ports.http }} \
+              {{- else }}
+              -port=8888 \
+              -disableHttp \
+              {{- end }}
+              {{- if and .Values.global.monitoring.enabled $filerConfig.ports.metrics }}
+              -metricsPort={{ $filerConfig.ports.metrics }} \
+              {{- end }}
+              {{- if $filerConfig.redirectReadsToVolumeServer }}
+              -redirectOnRead \
+              {{- end }}
+              {{- if $filerConfig.disableDirectoryListing }}
+              -disableDirListing \
+              {{- end }}
+              {{- if $filerConfig.encryptVolumeData }}
+              -encryptVolumeData \
+              {{- end }}
+              {{- if $s3GatewayEnabled }}
+              -s3 \
+              -s3.port={{ $s3GatewayConfig.ports.http }} \
+              {{- if $s3GatewayConfig.domainName }}
+              -s3.domainName={{ $s3GatewayConfig.domainName }} \
+              {{- end }}
+              {{- if and .Values.global.tls.enabled $s3GatewayConfig.ports.https }}
+              -s3.port.https={{ $s3GatewayConfig.httpsPort | int }} \
+              -s3.cert.file=/usr/local/share/ca-certificate/tls.crt \
+              -s3.key.file=/usr/local/share/ca-certificate/tls.key \
+              {{- end }}
+              {{- if $s3GatewayConfig.allowEmptyFolder }}
+              -s3.allowEmptyFolder={{ $s3GatewayConfig.allowEmptyFolder }} \
+              {{- end }}
+              {{- if $s3GatewayConfig.auth.enabled }}
+              -s3.config=/etc/sw/s3/config/config.json \
+              {{- end }}
+              {{- if $s3GatewayConfig.auditLog.jsonContents }}
+              -s3.auditLogConfig=/etc/sw/s3/auditLog/config.json \
+              {{- end }}
+              {{- end }}
+              -master={{ range $index := until (.Values.master.replicas | int) }}${SEAWEEDFS_FULLNAME}-master-{{ $index }}.${SEAWEEDFS_FULLNAME}-master.{{ $.Release.Namespace }}:{{ ternary $.Values.master.configuration.ports.http 9333 (not (empty $.Values.master.configuration.ports.http)) }}{{ if lt $index (sub ($.Values.master.replicas | int) 1) }},{{ end }}{{ end }}
+          volumeMounts:
+            - name: filer-config
+              mountPath: /usr/local/etc/seaweedfs/filer.toml
+              subPath: filer.toml
+            - name: filer-logs
+              mountPath: {{ if .Values.filer.persistence.logs.enabled }}{{ .Values.filer.persistence.logs.mountPath }}{{ else }}/logs{{ end }}
+            {{- if not $filerStoreConfigured }}
+            - name: filer-data
+              mountPath: {{ if .Values.filer.persistence.data.enabled }}{{ .Values.filer.persistence.data.mountPath }}{{ else }}/data{{ end }}
+            {{- end }}
+            {{- if $s3GatewayEnabled }}
+            {{- if .Values.global.s3Gateway.auditLog.jsonContents }}
+            - name: s3-gateway-audit-log-config
+              mountPath: /etc/sw/s3/auditLog/config.json
+              subPath: config.json
+            {{- end }}
+            {{- if .Values.global.s3Gateway.auth.enabled }}
+            - name: s3-gateway-auth
+              mountPath: /etc/sw/s3/config/config.json
+              subPath: config.json
+            {{- end }}
+            {{- end }}
+            {{- if .Values.global.tls.enabled }}
+            - name: security-config
+              readOnly: true
+              mountPath: /etc/seaweedfs/security.toml
+              subPath: security.toml
+            - name: tls-cert
+              readOnly: true
+              mountPath: /usr/local/share/ca-certificate/
+            {{- end }}
+            {{ tpl .Values.filer.extraVolumeMounts . | nindent 12 | trim }}
+          ports:
+            - containerPort: {{ $filerConfig.ports.grpc }}
+            - containerPort: {{ coalesce $filerConfig.ports.http 8888 }}
+              name: swfs-filer
+            {{- if and .Values.global.monitoring.enabled $filerConfig.ports.metrics }}
+            - containerPort: {{ $filerConfig.ports.metrics }}
+              name: metrics
+            {{- end }}
+          {{- if and .Values.filer.readinessProbe.enabled $filerConfig.ports.http }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.filer.readinessProbe.httpGet.path }}
+              port: {{ $filerConfig.ports.http }}
+              scheme: {{ .Values.filer.readinessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.filer.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.filer.readinessProbe.periodSeconds }}
+            successThreshold: {{ .Values.filer.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.filer.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.filer.readinessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if and .Values.filer.livenessProbe.enabled $filerConfig.ports.http }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.filer.livenessProbe.httpGet.path }}
+              port: {{ $filerConfig.ports.http }}
+              scheme: {{ .Values.filer.livenessProbe.scheme }}
+            initialDelaySeconds: {{ .Values.filer.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.filer.livenessProbe.periodSeconds }}
+            successThreshold: {{ .Values.filer.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.filer.livenessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.filer.livenessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if .Values.filer.resources }}
+          resources:
+            {{ tpl .Values.filer.resources . | nindent 12 | trim }}
+          {{- end }}
+      volumes:
+        - name: filer-config
+          emptyDir: {}
+        - name: filer-configmap-config
+          configMap:
+            name: {{ template "seaweedfs.name" . }}-filer-configuration
+        {{- if $filterStoreAuthProvided }}
+        - name: filer-store-auth
+          secret:
+            defaultMode: 420
+            secretName: {{ template "seaweedfs.name" . }}-filer-store-auth
+        {{- end }}
+        {{- if $s3GatewayEnabled }}
+        {{- if .Values.global.s3Gateway.auditLog.jsonContents }}
+        - name: s3-gateway-audit-log-config
+          configMap:
+            name: {{ template "seaweedfs.name" . }}-s3-gateway-audit-log
+        {{- end }}
+        {{- if .Values.global.s3Gateway.auth.enabled }}
+        - name: s3-gateway-auth
+          secret:
+            defaultMode: 420
+            secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth
+        {{- end }}
+        {{- end }}
+        {{- if not $filerStoreConfigured }}
+        {{- if not .Values.filer.persistence.data.enabled }}
+        - name: filer-data
+          emptyDir: {}
+        {{- else if .Values.filer.persistence.data.existingClaim }}
+        - name: filer-data
+          persistentVolumeClaim:
+            claimName: {{ printf "%s" (tpl .Values.filer.persistence.data.existingClaim .) }}
+        {{- end }}
+        {{- end }}
+        {{- if not .Values.filer.persistence.logs.enabled }}
+        - name: filer-logs
+          emptyDir: {}
+        {{- else if .Values.filer.persistence.logs.existingClaim }}
+        - name: filer-logs
+          persistentVolumeClaim:
+            claimName: {{ printf "%s" (tpl .Values.filer.persistence.logs.existingClaim .) }}
+        {{- end }}
+        {{- if .Values.global.tls.enabled }}
+        - name: security-config
+          configMap:
+            name: {{ template "seaweedfs.name" . }}-security-config
+        - name: tls-cert
+          secret:
+            secretName: {{ if .Values.global.tls.existingSecret }}{{ .Values.global.tls.existingSecret }}{{ else }}{{ template "seaweedfs.name" . }}-certificate-tls{{ end }}
+        {{- end }}
+        {{ tpl .Values.filer.extraVolumes . | indent 8 | trim }}
+      {{- if .Values.filer.nodeSelector }}
+      nodeSelector:
+        {{ tpl .Values.filer.nodeSelector . | indent 8 | trim }}
+      {{- end }}
+  {{- if or (and .Values.filer.persistence.data.enabled (not .Values.filer.persistence.data.existingClaim)) (and .Values.filer.persistence.logs.enabled (not .Values.filer.persistence.logs.existingClaim)) }}
+  volumeClaimTemplates:
+    {{- if and .Values.filer.persistence.data.enabled (not (or $filerStoreConfigured .Values.filer.persistence.data.existingClaim)) }}
+    - metadata:
+        name: filer-data
+        {{- if .Values.filer.persistence.data.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.filer.persistence.data.annotations "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.filer.persistence.data.labels }}
+        labels: {{- include "common.tplvalues.render" (dict "value" .Values.filer.persistence.data.labels "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.filer.persistence.data.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.filer.persistence.data.size | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.filer.persistence.data "global" .Values.global) | nindent 8 }}
+        {{- if .Values.filer.persistence.data.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.filer.persistence.data.selector "context" $) | nindent 10 }}
+        {{- end -}}
+    {{- end }}
+    {{- if and .Values.filer.persistence.logs.enabled (not .Values.filer.persistence.logs.existingClaim) }}
+    - metadata:
+        name: filer-logs
+        {{- if .Values.filer.persistence.logs.annotations }}
+        annotations: {{- include "common.tplvalues.render" (dict "value" .Values.filer.persistence.logs.annotations "context" $) | nindent 10 }}
+        {{- end }}
+        {{- if .Values.filer.persistence.logs.labels }}
+        labels: {{- include "common.tplvalues.render" (dict "value" .Values.filer.persistence.logs.labels "context" $) | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.filer.persistence.logs.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.filer.persistence.logs.size | quote }}
+        {{- include "common.storage.class" (dict "persistence" .Values.filer.persistence.logs "global" .Values.global) | nindent 8 }}
+        {{- if .Values.filer.persistence.logs.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.filer.persistence.logs.selector "context" $) | nindent 10 }}
+        {{- end -}}
+    {{- end }}
+  {{- end }}
+{{- end }}

@@ -89,7 +89,7 @@ spec:
           - name: filer-store-auth
             mountPath: /etc/sw/store/auth
         {{- end }}
-        {{- if .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
+        {{- if and $s3GatewayEnabled .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
         - name: update-s3-gateway-identities
           image: cbrendanprice/bash-jq-sponge:latest
           imagePullPolicy: IfNotPresent

@@ -1043,11 +1043,11 @@ filer:
         username: ""
         password: ""
 
-      ## @param filer.auth.store.existingSecret
+      ## @param filer.auth.store.credentialsExistingSecret
       ##  specifies the name of an existing secret that will be used to source
       ##   the `username` and `password` for the filer's store.
       ##
-      existingSecret: ""
+      credentialsExistingSecret: ""
 
   ## @param filer.configuration Configuration for the filer server component.
   ##

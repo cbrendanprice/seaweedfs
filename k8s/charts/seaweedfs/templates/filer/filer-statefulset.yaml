@@ -307,8 +307,8 @@ spec:
         - name: filer-store-auth
           secret:
             defaultMode: 420
-            {{- if .Values.filer.auth.store.existingSecret }}
-            secretName: {{ .Values.filer.auth.store.existingSecret | trim }}
+            {{- if .Values.filer.auth.store.credentialsExistingSecret }}
+            secretName: {{ .Values.filer.auth.store.credentialsExistingSecret | trim }}
             {{ else }}
             secretName: {{ template "seaweedfs.name" . }}-filer-store-auth-credentials
             {{ end }}

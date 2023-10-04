@@ -2,9 +2,10 @@
 {{- $filerConfig := .Values.filer.configuration }}
 {{- $filerStoreConfigured := and .Values.filer.configuration.store.sectionNameForConfigurationFileStoreSection .Values.filer.configuration.store.tomlContentsForConfigurationFileStoreSection }}
 {{- $filterStoreAuthProvided := and $filerStoreConfigured (or .Values.filer.auth.existingSecret (or .Values.filer.auth.store.credentials.username .Values.filer.auth.store.credentials.password)) }}
-{{- $initContainersRequired := or .Values.filer.initContainers $filterStoreAuthProvided .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
 {{- $s3GatewayEnabled := and .Values.filer.s3Gateway.enabled (not .Values.s3.enabled) }}
+{{- $s3GatewayAuthIdentities := .Values.global.s3Gateway.auth.identities }}
 {{- $s3GatewayConfig := .Values.global.s3Gateway }}
+{{- $initContainersRequired := or .Values.filer.initContainers $filterStoreAuthProvided $s3GatewayEnabled }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -89,8 +90,8 @@ spec:
           - name: filer-store-auth
             mountPath: /etc/sw/store/auth
         {{- end }}
-        {{- if and $s3GatewayEnabled .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
-        - name: update-s3-gateway-identities
+        {{- if and $s3GatewayEnabled .Values.global.s3Gateway.auth.enabled }}
+        - name: update-s3-gateway-auth
           image: cbrendanprice/bash-jq-sponge:latest
           imagePullPolicy: IfNotPresent
           securityContext:
@@ -101,16 +102,33 @@ spec:
           - |-
             mkdir -p /etc/sw/s3/config;
             cp /etc/sw/s3/config.json etc/sw/s3/config/config.json;
-            cat /etc/sw/s3/config/config.json | jq --slurpfile identities /etc/sw/s3/identities.json '.identities += $identities[]' | sponge /etc/sw/s3/config/config.json;
+            {{- range (list "administrator" "anonymous" "guest" "member") }}
+            test -f /etc/sw/s3/auth/{{ . }}.credentials.json && (cat /etc/sw/s3/config/config.json | jq --slurpfile credentials /etc/sw/s3/auth/{{ . }}.credentials.json '(.identities[] | select(.name == "{{ . }}")).credentials += $credentials[]' | sponge /etc/sw/s3/config/config.json);
+            test -f /etc/sw/s3/auth-extra/{{ . }}.credentials.json && (cat /etc/sw/s3/config/config.json | jq --slurpfile credentials /etc/sw/s3/auth-extra/{{ . }}.credentials.json '(.identities[] | select(.name == "{{ . }}")).credentials += $credentials[]' | sponge /etc/sw/s3/config/config.json);
+            {{- end }}
+            test -f /etc/sw/s3/auth-extra/identities.json && (cat /etc/sw/s3/config/config.json | jq --slurpfile identities /etc/sw/s3/auth-extra/identities.json '.identities += $identities[]' | sponge /etc/sw/s3/config/config.json);
+            :
           volumeMounts:
           - name: s3-gateway-auth
             mountPath: /etc/sw/s3/config
-          - name: s3-gateway-builtin-identities
+          - name: s3-gateway-auth-config
             mountPath: /etc/sw/s3/config.json
             subPath: config.json
-          - name: s3-gateway-extra-identities
-            mountPath: /etc/sw/s3/identities.json
+          - name: s3-gateway-auth-credentials
+            mountPath: /etc/sw/s3/auth
+          {{- range (list "administrator" "guest" "member") }}
+          {{- $identityConfig := (get $s3GatewayAuthIdentities .) }}
+          {{- if and $identityConfig.enabled $identityConfig.credentialsExistingSecret }}
+          - name: s3-gateway-auth-{{ . }}-credentials
+            mountPath: /etc/sw/s3/auth-extra/{{ . }}.credentials.json
+            subPath: credentials.json
+          {{- end }}
+          {{- end }}
+          {{- if .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
+          - name: s3-gateway-auth-extra-identities
+            mountPath: /etc/sw/s3/auth-extra/identities.json
             subPath: identities.json
+          {{- end }}
         {{- end }}
         {{- if .Values.filer.initContainers }}
         {{ tpl .Values.filer.initContainers . | nindent 8 | trim }}
@@ -292,7 +310,7 @@ spec:
             {{- if .Values.filer.auth.store.existingSecret }}
             secretName: {{ .Values.filer.auth.store.existingSecret | trim }}
             {{ else }}
-            secretName: {{ template "seaweedfs.name" . }}-filer-store-auth
+            secretName: {{ template "seaweedfs.name" . }}-filer-store-auth-credentials
             {{ end }}
         {{- end }}
         {{- if $s3GatewayEnabled }}
@@ -302,22 +320,29 @@ spec:
             name: {{ template "seaweedfs.name" . }}-s3-gateway-audit-log
         {{- end }}
         {{- if .Values.global.s3Gateway.auth.enabled }}
-        {{- if .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
         - name: s3-gateway-auth
           emptyDir: {}
-        - name: s3-gateway-builtin-identities
+        - name: s3-gateway-auth-config
+          configMap:
+            name: {{ template "seaweedfs.name" . }}-s3-gateway-auth-config
+        - name: s3-gateway-auth-credentials
           secret:
             defaultMode: 420
-            secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth
-        - name: s3-gateway-extra-identities
+            secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth-credentials
+        {{- range (list "administrator" "guest" "member") }}
+        {{- $identityConfig := (get $s3GatewayAuthIdentities .) }}
+        {{- if and $identityConfig.enabled $identityConfig.credentialsExistingSecret }}
+        - name: s3-gateway-auth-{{ . }}-credentials
+          secret:
+            defaultMode: 420
+            secretName: {{ $identityConfig.credentialsExistingSecret }}
+        {{- end }}
+        {{- end }}
+        {{- if .Values.global.s3Gateway.auth.extraIdentitiesSecret }}
+        - name: s3-gateway-auth-extra-identities
           secret:
             defaultMode: 420
             secretName: {{ .Values.global.s3Gateway.auth.extraIdentitiesSecret | trim }}
-        {{- else }}
-        - name: s3-gateway-auth
-          secret:
-            defaultMode: 420
-            secretName: {{ template "seaweedfs.name" . }}-s3-gateway-auth
         {{- end }}
         {{- end }}
         {{- end }}

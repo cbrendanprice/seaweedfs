@@ -147,6 +147,19 @@ global:
           ##    secretKey: "1234567890ABCDEFG"
           ##
           credentials: []
+          ## @param global.s3Gateway.auth.identities.administrator.credentialsExistingSecret
+          ##  the name of an existing secret containing a list of key pairs
+          ##   that will be registered under the built-in `administrator` identity.
+          ##
+          ## e.g.
+          ## ---
+          ## apiVersion: v1
+          ## kind: Secret
+          ## ...
+          ## stringData:
+          ##   credentials.json: '[{"accessKey":"access-key","secretKey":"secret-key"}]'
+          ##
+          credentialsExistingSecret: ""
         ## @param global.s3Gateway.auth.identities.anonymous Auth configuration
         ##  for the `anonymous` s3 gateway identity.
         ##
@@ -186,6 +199,19 @@ global:
           ##    secretKey: "1234567890ABCDEFG"
           ##
           credentials: []
+          ## @param global.s3Gateway.auth.identities.guest.credentialsExistingSecret
+          ##  the name of an existing secret containing a list of key pairs
+          ##   that will be registered under the built-in `guest` identity.
+          ##
+          ## e.g.
+          ## ---
+          ## apiVersion: v1
+          ## kind: Secret
+          ## ...
+          ## stringData:
+          ##   credentials.json: '[{"accessKey":"access-key","secretKey":"secret-key"}]'
+          ##
+          credentialsExistingSecret: ""
         ## @param global.s3Gateway.auth.identities.member Auth configuration for
         ##  the `member` s3 gateway identity.
         ##
@@ -213,6 +239,19 @@ global:
           ##    secretKey: "1234567890ABCDEFG"
           ##
           credentials: []
+          ## @param global.s3Gateway.auth.identities.member.credentialsExistingSecret
+          ##  the name of an existing secret containing a list of key pairs
+          ##   that will be registered under the built-in `member` identity.
+          ##
+          ## e.g.
+          ## ---
+          ## apiVersion: v1
+          ## kind: Secret
+          ## ...
+          ## stringData:
+          ##   credentials.json: '[{"accessKey":"access-key","secretKey":"secret-key"}]'
+          ##
+          credentialsExistingSecret: ""
 
     ## @param global.s3Gateway.ports
     ##
@@ -311,7 +350,7 @@ master:
   # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
   # Example:
   nodeSelector: |
-    beta.kubernetes.io/arch: amd64
+    kubernetes.io/arch: amd64
   # nodeSelector: |
   #   sw-backend: "true"
 
@@ -577,7 +616,7 @@ volume:
   # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
   # Example:
   nodeSelector: |
-   beta.kubernetes.io/arch: amd64
+   kubernetes.io/arch: amd64
   # nodeSelector: |
   #   sw-volume: "true"
 
@@ -929,7 +968,7 @@ filer:
   # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
   # Example:
   nodeSelector: |
-    beta.kubernetes.io/arch: amd64
+    kubernetes.io/arch: amd64
   # nodeSelector: |
   #   sw-backend: "true"
 
@@ -1255,7 +1294,7 @@ s3:
   # ref: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
   # Example:
   nodeSelector: |
-    beta.kubernetes.io/arch: amd64
+    kubernetes.io/arch: amd64
   # nodeSelector: |
   #   sw-backend: "true"
 

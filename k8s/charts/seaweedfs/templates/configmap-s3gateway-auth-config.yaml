@@ -1,0 +1,32 @@
+{{- if and (or .Values.filer.s3Gateway.enabled .Values.s3.enabled) .Values.global.s3Gateway.auth.enabled }}
+{{- $identities := .Values.global.s3Gateway.auth.identities }}
+{{- $administratorIdentity := "" }}
+{{- if $identities.administrator.enabled }}
+{{- $administratorIdentity = (dict "actions" (list "Admin" "List" "Read" "ReadAcp" "Tagging" "Write" "WriteAcp") "credentials" (list) "name" "administrator") }}
+{{- end }}
+{{- $anonymousIdentity := "" }}
+{{- if $identities.anonymous.enabled }}
+{{- $anonymousIdentity = (dict "actions" (list "Read") "name" "anonymous") }}
+{{- end }}
+{{- $guestIdentity := "" }}
+{{- if $identities.guest.enabled }}
+{{- $guestIdentity = (dict "actions" (list "List" "Read") "credentials" (list) "name" "guest") }}
+{{- end }}
+{{- $memberIdentity := "" }}
+{{- if $identities.member.enabled }}
+{{- $memberIdentity = (dict "actions" (list "List" "Read" "Tagging" "Write") "credentials" (list) "name" "member") }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/component: s3-gateway
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/name: {{ template "seaweedfs.name" . }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+  name: {{ template "seaweedfs.name" . }}-s3-gateway-auth-config
+  namespace: {{ .Release.Namespace }}
+data:
+  config.json: {{ quote (mustToJson (dict "identities" (compact (list $administratorIdentity $anonymousIdentity $guestIdentity $memberIdentity)))) }}
+{{- end }}

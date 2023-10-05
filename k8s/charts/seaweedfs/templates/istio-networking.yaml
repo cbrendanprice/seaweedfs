@@ -25,7 +25,7 @@ spec:
   http:
   - route:
     - destination:
-        host: '{{ template "seaweedfs.name" . }}-filer.{{ .Release.Namespace }}.svc.cluster.local'
+        host: '{{ template "seaweedfs.name" . }}-filer-client.{{ .Release.Namespace }}.svc.cluster.local'
         port:
           number: {{ .Values.filer.configuration.ports.http }}
 {{- end }}

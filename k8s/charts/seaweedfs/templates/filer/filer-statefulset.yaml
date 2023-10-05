@@ -1,7 +1,7 @@
 {{- if .Values.filer.enabled }}
 {{- $filerConfig := .Values.filer.configuration }}
 {{- $filerStoreConfigured := and .Values.filer.configuration.store.sectionNameForConfigurationFileStoreSection .Values.filer.configuration.store.tomlContentsForConfigurationFileStoreSection }}
-{{- $filterStoreAuthProvided := and $filerStoreConfigured (or .Values.filer.auth.existingSecret (or .Values.filer.auth.store.credentials.username .Values.filer.auth.store.credentials.password)) }}
+{{- $filterStoreAuthProvided := and $filerStoreConfigured (or .Values.filer.auth.store.credentialsExistingSecret (or .Values.filer.auth.store.credentials.username .Values.filer.auth.store.credentials.password)) }}
 {{- $s3GatewayEnabled := and .Values.filer.s3Gateway.enabled (not .Values.s3.enabled) }}
 {{- $s3GatewayAuthIdentities := .Values.global.s3Gateway.auth.identities }}
 {{- $s3GatewayConfig := .Values.global.s3Gateway }}

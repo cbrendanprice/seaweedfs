@@ -9,7 +9,7 @@ jobs:
     permissions:
       contents: write
       packages: write
-      parges: write
+      pages: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

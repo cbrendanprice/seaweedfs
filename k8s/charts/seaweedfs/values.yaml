@@ -70,6 +70,9 @@ global:
   ##       s3 server components, depending on which is enabled.
   ##
   s3Gateway:
+    ## @param global.s3Gateway.allowDeleteBucketNotEmpty
+    ##
+    allowDeleteBucketNotEmpty: true
     ## @param global.s3Gateway.allowEmptyFolder
     ##
     allowEmptyFolder: true

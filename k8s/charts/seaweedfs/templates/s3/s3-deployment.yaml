@@ -135,6 +135,9 @@ spec:
               {{- if $s3GatewayConfig.domainName }}
               -domainName={{ $s3GatewayConfig.domainName }} \
               {{- end }}
+              {{- if $s3GatewayConfig.allowDeleteBucketNotEmpty }}
+              -allowDeleteBucketNotEmpty={{ $s3GatewayConfig.allowDeleteBucketNotEmpty }} \
+              {{- end }}
               {{- if $s3GatewayConfig.allowEmptyFolder }}
               -allowEmptyFolder={{ $s3GatewayConfig.allowEmptyFolder }} \
               {{- end }}

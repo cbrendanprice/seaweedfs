@@ -218,6 +218,9 @@ spec:
               -s3.cert.file=/usr/local/share/ca-certificate/tls.crt \
               -s3.key.file=/usr/local/share/ca-certificate/tls.key \
               {{- end }}
+              {{- if $s3GatewayConfig.allowDeleteBucketNotEmpty }}
+              -s3.allowDeleteBucketNotEmpty={{ $s3GatewayConfig.allowDeleteBucketNotEmpty }} \
+              {{- end }}
               {{- if $s3GatewayConfig.allowEmptyFolder }}
               -s3.allowEmptyFolder={{ $s3GatewayConfig.allowEmptyFolder }} \
               {{- end }}

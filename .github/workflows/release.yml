@@ -23,8 +23,7 @@ jobs:
 
       - name: Run chart-releaser
         uses: helm/chart-releaser-action@v1.5.0
-        env:
-          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
         with:
           charts_dir: k8s/charts
-          target_dir: helm
+          install_dir: helm
+          token: ${{ secrets.GITHUB_TOKEN }}

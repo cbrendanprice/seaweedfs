@@ -3,6 +3,15 @@ entries:
   seaweedfs:
   - apiVersion: v1
     appVersion: "3.63"
+    created: "2024-03-07T18:17:22.085518747Z"
+    description: SeaweedFS
+    digest: 82d0c296521ef88c092bcb1bc735c6febf7f6b2cdbb560bb82eff1f0ebd006dc
+    name: seaweedfs
+    urls:
+    - https://github.com/cbrendanprice/seaweedfs/releases/download/seaweedfs-3.63.3/seaweedfs-3.63.3.tgz
+    version: 3.63.3
+  - apiVersion: v1
+    appVersion: "3.63"
     created: "2024-03-07T17:57:27.128802775Z"
     description: SeaweedFS
     digest: 3db7d72e2e4481d820d02a0c8befbf0f9f8afb40ed47781f98f8b1b7acab88a1
@@ -19,4 +28,4 @@ entries:
     urls:
     - https://github.com/cbrendanprice/seaweedfs/releases/download/seaweedfs-3.63.1/seaweedfs-3.63.1.tgz
     version: 3.63.1
-generated: "2024-03-07T17:57:27.128814768Z"
+generated: "2024-03-07T18:17:22.085535547Z"

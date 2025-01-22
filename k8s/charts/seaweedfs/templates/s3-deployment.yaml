@@ -134,6 +134,9 @@ spec:
               {{- if .Values.s3.domainName }}
               -domainName={{ .Values.s3.domainName }} \
               {{- end }}
+              {{- if .Values.s3.allowDeleteBucketNotEmpty }}
+              -allowDeleteBucketNotEmpty={{ .Values.s3.allowDeleteBucketNotEmpty }} \
+              {{- end }}
               {{- if .Values.s3.allowEmptyFolder }}
               -allowEmptyFolder={{ .Values.s3.allowEmptyFolder }} \
               {{- end }}

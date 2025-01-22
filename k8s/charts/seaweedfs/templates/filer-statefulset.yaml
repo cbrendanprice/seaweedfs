@@ -209,6 +209,9 @@ spec:
               -s3.cert.file=/usr/local/share/ca-certificates/client/tls.crt \
               -s3.key.file=/usr/local/share/ca-certificates/client/tls.key \
               {{- end }}
+              {{- if .Values.filer.s3.allowDeleteBucketNotEmpty }}
+              -s3.allowDeleteBucketNotEmpty={{ .Values.filer.s3.allowDeleteBucketNotEmpty }} \
+              {{- end }}
               {{- if .Values.filer.s3.allowEmptyFolder }}
               -s3.allowEmptyFolder={{ .Values.filer.s3.allowEmptyFolder }} \
               {{- end }}

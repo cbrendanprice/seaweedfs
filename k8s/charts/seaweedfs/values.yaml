@@ -791,6 +791,8 @@ filer:
     port: 8333
     # add additional https port
     httpsPort: 0
+    # allow deletion of buckets that are not empty
+    allowDeleteBucketNotEmpty: false
     # allow empty folders
     allowEmptyFolder: false
     # Suffix of the host name, {bucket}.{domainName}
@@ -820,6 +822,8 @@ s3:
   httpsPort: 0
   metricsPort: 9327
   loggingOverrideLevel: null
+  # allow deletion of buckets that are not empty
+  allowDeleteBucketNotEmpty: false
   # allow empty folders
   allowEmptyFolder: true
   # enable user & permission to s3 (need to inject to all services)

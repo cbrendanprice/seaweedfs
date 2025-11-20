@@ -1056,6 +1056,8 @@ filer:
     port: 8333
     # add additional https port
     httpsPort: 0
+    # allow deletion of buckets that are not empty
+    allowDeleteBucketNotEmpty: false
     # Suffix of the host name, {bucket}.{domainName}
     domainName: ""
     # enable user & permission to s3 (need to inject to all services)
@@ -1119,6 +1121,8 @@ s3:
   # (and, unless worker.namespaceUrl points elsewhere, the worker's Lance container)
   lancePort: 9101
   loggingOverrideLevel: null
+  # allow deletion of buckets that are not empty
+  allowDeleteBucketNotEmpty: false
   # enable user & permission to s3 (need to inject to all services)
   enableAuth: false
   # set to the name of an existing kubernetes Secret with the s3 json config file
